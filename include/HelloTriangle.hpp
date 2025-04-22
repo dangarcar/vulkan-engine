@@ -269,7 +269,8 @@ private:
     std::vector<VkFramebuffer> imguiFramebuffers;
     VkCommandPool imguiCommandPool;
     std::vector<VkCommandBuffer> imguiCommandBuffers;
-    
+    std::vector<VkSemaphore> imguiRenderFinishedSemaphores;
+    std::vector<VkFence> imguiInFlightFences;
 
 
     void initWindow() {
@@ -378,6 +379,11 @@ private:
         vkFreeCommandBuffers(this->device, this->imguiCommandPool, static_cast<uint32_t>(this->imguiCommandBuffers.size()), this->imguiCommandBuffers.data());
         vkDestroyCommandPool(this->device, this->imguiCommandPool, nullptr);
 
+        for (int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
+            vkDestroySemaphore(this->device, this->imguiRenderFinishedSemaphores[i], nullptr);
+            vkDestroyFence(this->device, this->imguiInFlightFences[i], nullptr);
+        }
+
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
@@ -391,6 +397,7 @@ private:
         this->imguiCommandPool = createCommandPool(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         this->imguiCommandBuffers = createCommandBuffers(MAX_FRAMES_IN_FLIGHT, this->imguiCommandPool);
         createImguiFramebuffers();
+        createImguiSyncObjects();
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -424,7 +431,11 @@ private:
     }
 
     void drawFrame() {
-        vkWaitForFences(this->device, 1, &this->inFlightFences[this->currentFrame], VK_TRUE, UINT64_MAX);
+        std::array<VkFence, 2> fences = {
+            this->inFlightFences[this->currentFrame], 
+            this->imguiInFlightFences[this->currentFrame]
+        };
+        vkWaitForFences(this->device, static_cast<uint32_t>(fences.size()), fences.data(), VK_TRUE, UINT64_MAX);
         
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(this->device, this->swapChain, UINT64_MAX, this->imageAvailableSemaphores[this->currentFrame], VK_NULL_HANDLE, &imageIndex);
@@ -436,7 +447,7 @@ private:
         }
         
         // Only reset the fence if we are submitting work
-        vkResetFences(this->device, 1, &this->inFlightFences[this->currentFrame]);
+        vkResetFences(this->device, static_cast<uint32_t>(fences.size()), fences.data());
         
         vkResetCommandBuffer(this->commandBuffers[this->currentFrame], 0);
         recordCommandBuffer(this->commandBuffers[this->currentFrame], imageIndex);
@@ -446,36 +457,55 @@ private:
         
         updateUniformBuffer(this->currentFrame);
 
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-        VkSemaphore waitSemaphores[] = {this->imageAvailableSemaphores[this->currentFrame]};
-        VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = waitSemaphores;
-        submitInfo.pWaitDstStageMask = waitStages;
-        
-        VkCommandBuffer submitCommandBuffers[] = {
-            this->commandBuffers[this->currentFrame],
-            this->imguiCommandBuffers[this->currentFrame],
-        };
-        submitInfo.commandBufferCount = sizeof(submitCommandBuffers) / sizeof(VkCommandBuffer);
-        submitInfo.pCommandBuffers = submitCommandBuffers;
-
-        VkSemaphore signalSemaphores[] = {this->renderFinishedSemaphores[this->currentFrame]};
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = signalSemaphores;
-
-        if (vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, this->inFlightFences[this->currentFrame]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to submit draw command buffer!");
+        {
+            VkSubmitInfo submitInfo{};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    
+            VkSemaphore waitSemaphores[] = {this->imageAvailableSemaphores[this->currentFrame]};
+            VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+            submitInfo.waitSemaphoreCount = 1;
+            submitInfo.pWaitSemaphores = waitSemaphores;
+            submitInfo.pWaitDstStageMask = waitStages;
+            
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &this->commandBuffers[this->currentFrame];
+    
+            VkSemaphore signalSemaphores[] = {this->renderFinishedSemaphores[this->currentFrame]};
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores = signalSemaphores;
+    
+            if (vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, this->inFlightFences[this->currentFrame]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to submit draw command buffer!");
+            }
         }
 
+        {
+            VkSubmitInfo submitInfo{};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    
+            VkSemaphore waitSemaphores[] = {this->renderFinishedSemaphores[this->currentFrame]};
+            VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+            submitInfo.waitSemaphoreCount = 1;
+            submitInfo.pWaitSemaphores = waitSemaphores;
+            submitInfo.pWaitDstStageMask = waitStages;
+            
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &this->imguiCommandBuffers[this->currentFrame];
+    
+            VkSemaphore signalSemaphores[] = {this->imguiRenderFinishedSemaphores[this->currentFrame]};
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores = signalSemaphores;
+    
+            if (vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, this->imguiInFlightFences[this->currentFrame]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to submit draw command buffer!");
+            }
+        }
 
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
         presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = signalSemaphores;
+        presentInfo.pWaitSemaphores = &this->imguiRenderFinishedSemaphores[this->currentFrame];
         
         VkSwapchainKHR swapChains[] = {this->swapChain};
         presentInfo.swapchainCount = 1;
@@ -1351,7 +1381,8 @@ private:
         colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        //colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; //This layout serves for the imgui pass to write over the result image 
 
         VkAttachmentReference colorAttachmentResolveRef{};
         colorAttachmentResolveRef.attachment = 2;
@@ -2025,7 +2056,6 @@ private:
         
         attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
         
         VkAttachmentReference color_attachment = {};
         color_attachment.attachment = 0;
@@ -2078,6 +2108,25 @@ private:
         
             if (vkCreateFramebuffer(this->device, &framebufferInfo, nullptr, &this->imguiFramebuffers[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create framebuffer!");
+            }
+        }
+    }
+
+    void createImguiSyncObjects() {
+        this->imguiRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        this->imguiInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+        VkSemaphoreCreateInfo semaphoreInfo{};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        VkFenceCreateInfo fenceInfo{};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    
+        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
+            if (vkCreateSemaphore(this->device, &semaphoreInfo, nullptr, &this->imguiRenderFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateFence(this->device, &fenceInfo, nullptr, &this->imguiInFlightFences[i]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create ImGui synchronization objects for a frame!");
             }
         }
     }
@@ -2150,5 +2199,4 @@ private:
             }
         }
     }
-
 };
