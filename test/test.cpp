@@ -1,7 +1,7 @@
 #include <HelloTriangle.hpp>
 
 int main() {
-    HelloTriangleApplication app;
+    fly::HelloTriangleApplication app;
 
     try {
         app.run();

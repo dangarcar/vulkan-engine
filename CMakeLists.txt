@@ -32,10 +32,10 @@ target_link_libraries(imgui PRIVATE glfw Vulkan::Vulkan)
 target_include_directories(imgui PUBLIC ${imgui_external_SOURCE_DIR})
 	
 include_directories(include)
-file(GLOB sources src/*.cpp)
+file(GLOB_RECURSE sources src/*.cpp)
 add_library(engine STATIC ${sources})
 target_link_libraries(engine PUBLIC glfw ${GLFW_LIBRARIES} Vulkan::Vulkan glm imgui)
-target_include_directories(engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Test executable
 add_executable(EngineTest test/test.cpp)
