@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vulkan/VulkanHelpers.hpp"
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 
@@ -24,15 +25,7 @@ namespace fly {
     
     class VertexArray {
     public:
-        VertexArray(
-            const VkPhysicalDevice& physicalDevice,
-            const VkDevice& device,
-            const VkQueue& graphicsQueue, 
-            const VkCommandPool& commandPool, 
-
-            std::vector<Vertex>&& vertices, std::vector<uint32_t>&& indices
-        );
-
+        VertexArray(const VulkanInstance& vk, const VkCommandPool commandPool, std::vector<Vertex>&& vertices, std::vector<uint32_t>&& indices);
             
         ~VertexArray();
 
@@ -50,29 +43,14 @@ namespace fly {
         VkBuffer indexBuffer;
         VkDeviceMemory indexBufferMemory;
     
-        const VkDevice& device;
+        const VulkanInstance& vk;
 
     private:
-        void createVertexBuffer(
-            const VkPhysicalDevice& physicalDevice,
-            const VkQueue& graphicsQueue, 
-            const VkCommandPool& commandPool
-        );
-        void createIndexBuffer(
-            const VkPhysicalDevice& physicalDevice,
-            const VkQueue& graphicsQueue, 
-            const VkCommandPool& commandPool
-        );
+        void createVertexBuffer(const VkCommandPool commandPool);
+        void createIndexBuffer(const VkCommandPool commandPool);
     };
 
-    std::unique_ptr<VertexArray> loadModel(
-        const VkPhysicalDevice& physicalDevice,
-        const VkDevice& device,
-        const VkQueue& graphicsQueue, 
-        const VkCommandPool& commandPool, 
-        
-        std::filesystem::path filepath
-    );
+    std::unique_ptr<VertexArray> loadModel(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path filepath);
 
 }
 

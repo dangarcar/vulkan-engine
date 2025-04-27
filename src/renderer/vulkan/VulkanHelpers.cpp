@@ -11,8 +11,7 @@ namespace fly {
     
 
     void createBuffer(
-        const VkPhysicalDevice physicalDevice,
-        const VkDevice device, 
+        const VulkanInstance& vk, 
         
         VkDeviceSize size, 
         VkBufferUsageFlags usage, 
@@ -26,34 +25,33 @@ namespace fly {
         bufferInfo.usage = usage;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+        if (vkCreateBuffer(vk.device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to create vertex buffer!");
         }
 
         VkMemoryRequirements memRequirements;
-        vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+        vkGetBufferMemoryRequirements(vk.device, buffer, &memRequirements);
 
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties);
+        allocInfo.memoryTypeIndex = findMemoryType(vk, memRequirements.memoryTypeBits, properties);
         
-        if(vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        if(vkAllocateMemory(vk.device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate vertex buffer memory!");
         }
 
-        vkBindBufferMemory(device, buffer, bufferMemory, 0);
+        vkBindBufferMemory(vk.device, buffer, bufferMemory, 0);
     }
 
     
     uint32_t findMemoryType(
-        const VkPhysicalDevice physicalDevice, 
-
+        const VulkanInstance& vk, 
         uint32_t typeFilter, 
         VkMemoryPropertyFlags properties
     ) {
         VkPhysicalDeviceMemoryProperties memProperties;
-        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+        vkGetPhysicalDeviceMemoryProperties(vk.physicalDevice, &memProperties);
 
         for (uint32_t i=0; i<memProperties.memoryTypeCount; i++) {
             if (typeFilter & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
@@ -65,7 +63,7 @@ namespace fly {
     }
 
     
-    VkCommandBuffer beginSingleTimeCommands(const VkDevice device, const VkCommandPool commandPool) {
+    VkCommandBuffer beginSingleTimeCommands(const VulkanInstance& vk, VkCommandPool commandPool) {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -73,7 +71,7 @@ namespace fly {
         allocInfo.commandBufferCount = 1;
     
         VkCommandBuffer commandBuffer;
-        vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+        vkAllocateCommandBuffers(vk.device, &allocInfo, &commandBuffer);
     
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -85,12 +83,7 @@ namespace fly {
     }
 
     
-    void endSingleTimeCommands(
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
-        const VkCommandPool commandPool,
-        VkCommandBuffer commandBuffer
-    ) {
+    void endSingleTimeCommands(const VulkanInstance& vk, const VkCommandPool commandPool, VkCommandBuffer commandBuffer) {
         vkEndCommandBuffer(commandBuffer);
     
         VkSubmitInfo submitInfo{};
@@ -98,29 +91,27 @@ namespace fly {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
     
-        vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(graphicsQueue);
+        vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(vk.graphicsQueue);
     
-        vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+        vkFreeCommandBuffers(vk.device, commandPool, 1, &commandBuffer);
     }
 
     
     void copyBuffer(
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
-        const VkCommandPool commandPool, 
+        const VulkanInstance& vk, const VkCommandPool commandPool, 
 
         VkBuffer srcBuffer, 
         VkBuffer dstBuffer, 
         VkDeviceSize size
     ) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
 
         VkBufferCopy copyRegion{};
         copyRegion.size = size;
         vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-        endSingleTimeCommands(device, graphicsQueue, commandPool, commandBuffer);
+        endSingleTimeCommands(vk, commandPool, commandBuffer);
     }
 
 
@@ -179,14 +170,8 @@ namespace fly {
         return indices;
     }
 
-    VkCommandPool createCommandPool(
-        const VkPhysicalDevice physicalDevice,
-        const VkDevice device,
-        const VkSurfaceKHR surface,
-
-        VkCommandPoolCreateFlags flags
-    ) {
-        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(surface, physicalDevice);
+    VkCommandPool createCommandPool(const VulkanInstance& vk, VkCommandPoolCreateFlags flags) {
+        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(vk.surface, vk.physicalDevice);
 
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -194,7 +179,7 @@ namespace fly {
         poolInfo.flags = flags;
 
         VkCommandPool pool;
-        if (vkCreateCommandPool(device, &poolInfo, nullptr, &pool) != VK_SUCCESS) {
+        if (vkCreateCommandPool(vk.device, &poolInfo, nullptr, &pool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create command pool!");
         }
 
@@ -341,9 +326,7 @@ namespace fly {
 
 
     void generateMipmaps(
-        const VkPhysicalDevice physicalDevice,
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
+        const VulkanInstance& vk, 
         const VkCommandPool commandPool,
 
         VkImage image, 
@@ -354,13 +337,13 @@ namespace fly {
     ) {
         // Check if image format supports linear blitting
         VkFormatProperties formatProperties;
-        vkGetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, &formatProperties);
+        vkGetPhysicalDeviceFormatProperties(vk.physicalDevice, imageFormat, &formatProperties);
         
         if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
             throw std::runtime_error("texture image format does not support linear blitting!");
         }
 
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
     
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -439,13 +422,12 @@ namespace fly {
             0, nullptr,
             1, &barrier);
 
-        endSingleTimeCommands(device, graphicsQueue, commandPool, commandBuffer);
+        endSingleTimeCommands(vk, commandPool, commandBuffer);
     }
 
 
     void transitionImageLayout(
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
+        const VulkanInstance& vk,
         const VkCommandPool commandPool,
 
         VkImage image, 
@@ -454,7 +436,7 @@ namespace fly {
         VkImageLayout newLayout, 
         uint32_t mipLevels
     ) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
    
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -499,13 +481,12 @@ namespace fly {
             1, &barrier
         );
 
-        endSingleTimeCommands(device, graphicsQueue, commandPool, commandBuffer);
+        endSingleTimeCommands(vk, commandPool, commandBuffer);
     }
 
 
     void copyBufferToImage(
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
+        const VulkanInstance& vk,
         const VkCommandPool commandPool,
 
         VkBuffer buffer, 
@@ -513,7 +494,7 @@ namespace fly {
         uint32_t width, 
         uint32_t height
     ) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
     
         VkBufferImageCopy region{};
         region.bufferOffset = 0;
@@ -541,13 +522,12 @@ namespace fly {
             &region
         );
 
-        endSingleTimeCommands(device, graphicsQueue, commandPool, commandBuffer);
+        endSingleTimeCommands(vk, commandPool, commandBuffer);
     }
 
 
     VkImageView createImageView(
-        const VkDevice device,
-
+        const VulkanInstance& vk,
         VkImage image, 
         VkFormat format, 
         VkImageAspectFlags aspectFlags, 
@@ -565,7 +545,7 @@ namespace fly {
         viewInfo.subresourceRange.layerCount = 1;
     
         VkImageView imageView;
-        if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+        if (vkCreateImageView(vk.device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture image view!");
         }
     
@@ -574,9 +554,7 @@ namespace fly {
 
 
     void createImage(
-        const VkPhysicalDevice physicalDevice,
-        const VkDevice device,
-
+        const VulkanInstance& vk,
         uint32_t width, 
         uint32_t height, 
         uint32_t mipLevels, 
@@ -603,23 +581,23 @@ namespace fly {
         imageInfo.samples = numSamples;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     
-        if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+        if (vkCreateImage(vk.device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
             throw std::runtime_error("failed to create image!");
         }
     
         VkMemoryRequirements memRequirements;
-        vkGetImageMemoryRequirements(device, image, &memRequirements);
+        vkGetImageMemoryRequirements(vk.device, image, &memRequirements);
     
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties);
+        allocInfo.memoryTypeIndex = findMemoryType(vk, memRequirements.memoryTypeBits, properties);
     
-        if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+        if (vkAllocateMemory(vk.device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate image memory!");
         }
     
-        vkBindImageMemory(device, image, imageMemory, 0);
+        vkBindImageMemory(vk.device, image, imageMemory, 0);
     }
 
 

@@ -1,31 +1,12 @@
 #pragma once 
 
-#include <vulkan/vulkan.h>
-#include <optional>
-#include <vector>
+#include "VulkanTypes.h"
 
 namespace fly {
 
-    struct QueueFamilyIndices {
-        std::optional<uint32_t> graphicsAndComputeFamily;
-        std::optional<uint32_t> presentFamily;
-    
-        bool isComplete() {
-            return graphicsAndComputeFamily.has_value() && presentFamily.has_value();
-        }
-    };
-    
-    struct SwapChainSupportDetails {
-        VkSurfaceCapabilitiesKHR capabilities;
-        std::vector<VkSurfaceFormatKHR> formats;
-        std::vector<VkPresentModeKHR> presentModes;
-    };
-
     //FUNCTION DECLARATIONS
     void createBuffer(
-        const VkPhysicalDevice physicalDevice,
-        const VkDevice device, 
-        
+        const VulkanInstance& vk, 
         VkDeviceSize size, 
         VkBufferUsageFlags usage, 
         VkMemoryPropertyFlags properties, 
@@ -34,29 +15,17 @@ namespace fly {
     );
 
     uint32_t findMemoryType(
-        const VkPhysicalDevice physicalDevice, 
-        
+        const VulkanInstance& vk, 
         uint32_t typeFilter, 
         VkMemoryPropertyFlags properties
     );
 
-    VkCommandBuffer beginSingleTimeCommands(
-        const VkDevice device, 
-        const VkCommandPool commandPool
-    );
+    VkCommandBuffer beginSingleTimeCommands(const VulkanInstance& vk);
 
-    void endSingleTimeCommands(
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
-        const VkCommandPool commandPool, 
-        
-        VkCommandBuffer commandBuffer
-    );
+    void endSingleTimeCommands(const VulkanInstance& vk, const VkCommandPool commandPool, VkCommandBuffer commandBuffer);
 
     void copyBuffer(
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
-        const VkCommandPool commandPool, 
+        const VulkanInstance& vk, const VkCommandPool commandPool, 
 
         VkBuffer srcBuffer, 
         VkBuffer dstBuffer, 
@@ -71,13 +40,7 @@ namespace fly {
         VkFormatFeatureFlags features
     );
 
-    VkCommandPool createCommandPool(
-        const VkPhysicalDevice physicalDevice,
-        const VkDevice device,
-        const VkSurfaceKHR surface,
-
-        VkCommandPoolCreateFlags flags
-    );
+    VkCommandPool createCommandPool(const VulkanInstance& vk, VkCommandPoolCreateFlags flags);
 
     QueueFamilyIndices findQueueFamilies(const VkSurfaceKHR surface, VkPhysicalDevice physicalDevice);
 
@@ -102,9 +65,7 @@ namespace fly {
 
     //IMAGE
     void generateMipmaps(
-        const VkPhysicalDevice physicalDevice,
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
+        const VulkanInstance& vk, 
         const VkCommandPool commandPool,
 
         VkImage image, 
@@ -115,8 +76,7 @@ namespace fly {
     );
 
     void transitionImageLayout(
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
+        const VulkanInstance& vk,
         const VkCommandPool commandPool,
 
         VkImage image, 
@@ -127,8 +87,7 @@ namespace fly {
     );
 
     void copyBufferToImage(
-        const VkDevice device, 
-        const VkQueue graphicsQueue, 
+        const VulkanInstance& vk,
         const VkCommandPool commandPool,
 
         VkBuffer buffer, 
@@ -138,8 +97,7 @@ namespace fly {
     );
 
     VkImageView createImageView(
-        const VkDevice device,
-
+        const VulkanInstance& vk,
         VkImage image, 
         VkFormat format, 
         VkImageAspectFlags aspectFlags, 
@@ -147,9 +105,7 @@ namespace fly {
     );
 
     void createImage(
-        const VkPhysicalDevice physicalDevice,
-        const VkDevice device,
-
+        const VulkanInstance& vk,
         uint32_t width, 
         uint32_t height, 
         uint32_t mipLevels, 
