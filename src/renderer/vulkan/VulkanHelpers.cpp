@@ -1,10 +1,12 @@
 #include "VulkanHelpers.hpp"
 
+#include <cstdint>
 #include <stdexcept>
 #include <set>
 #include <cstring>
 
 #include "VulkanConstants.h"
+#include "VulkanTypes.h"
 
 
 namespace fly {
@@ -599,6 +601,5 @@ namespace fly {
     
         vkBindImageMemory(vk.device, image, imageMemory, 0);
     }
-
 
 }

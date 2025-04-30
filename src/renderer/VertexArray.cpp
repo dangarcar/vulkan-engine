@@ -31,8 +31,8 @@ namespace fly {
     }
    
     
-    std::array<VkVertexInputAttributeDescription, 3> Vertex::getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+    std::vector<VkVertexInputAttributeDescription> Vertex::getAttributeDescriptions() {
+        std::vector<VkVertexInputAttributeDescription> attributeDescriptions(3);
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -56,23 +56,16 @@ namespace fly {
     }
   
     
-    VertexArray::VertexArray(const VulkanInstance& vk, const VkCommandPool commandPool, std::vector<Vertex>&& vertices, std::vector<uint32_t>&& indices): 
+    template<typename Vertex_t>
+    TVertexArray<Vertex_t>::TVertexArray(const VulkanInstance& vk, const VkCommandPool commandPool, std::vector<Vertex_t>&& vertices, std::vector<uint32_t>&& indices): 
         vertices{vertices}, indices{indices}, vk{vk}
     {
         createVertexBuffer(commandPool);
         createIndexBuffer(commandPool);
     }
 
-    VertexArray::~VertexArray() {
-        vkDestroyBuffer(vk.device, this->indexBuffer, nullptr);
-        vkFreeMemory(vk.device, this->indexBufferMemory, nullptr);
-
-        vkDestroyBuffer(vk.device, this->vertexBuffer, nullptr);
-        vkFreeMemory(vk.device, this->vertexBufferMemory, nullptr);
-    }
-
-
-    void VertexArray::createVertexBuffer(const VkCommandPool commandPool) {
+    template<typename Vertex_t>
+    void TVertexArray<Vertex_t>::createVertexBuffer(const VkCommandPool commandPool) {
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
         
         VkBuffer stagingBuffer;
@@ -113,8 +106,8 @@ namespace fly {
         vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
     }
 
-
-    void VertexArray::createIndexBuffer(const VkCommandPool commandPool) {
+    template<typename Vertex_t>
+    void TVertexArray<Vertex_t>::createIndexBuffer(const VkCommandPool commandPool) {
         VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
         VkBuffer stagingBuffer;

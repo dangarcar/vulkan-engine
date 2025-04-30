@@ -1,13 +1,10 @@
 #pragma once
 
-#include "vulkan/VulkanHelpers.hpp"
-#include <vulkan/vulkan.h>
+#include "vulkan/VulkanTypes.h"
 #include <glm/glm.hpp>
 
-#include <memory>
 #include <vector>
 #include <filesystem>
-#include <array>
 
 namespace fly {
 
@@ -18,25 +15,32 @@ namespace fly {
     
         static VkVertexInputBindingDescription getBindingDescription();
     
-        static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions();
+        static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
     
         bool operator==(const Vertex& other) const;
     };
     
-    class VertexArray {
+    template<typename Vertex_t>
+    class TVertexArray {
     public:
-        VertexArray(const VulkanInstance& vk, const VkCommandPool commandPool, std::vector<Vertex>&& vertices, std::vector<uint32_t>&& indices);
-            
-        ~VertexArray();
+        TVertexArray(const VulkanInstance& vk, const VkCommandPool commandPool, std::vector<Vertex_t>&& vertices, std::vector<uint32_t>&& indices);
+        
+        ~TVertexArray() {
+            vkDestroyBuffer(vk.device, this->indexBuffer, nullptr);
+            vkFreeMemory(vk.device, this->indexBufferMemory, nullptr);
+
+            vkDestroyBuffer(vk.device, this->vertexBuffer, nullptr);
+            vkFreeMemory(vk.device, this->vertexBufferMemory, nullptr);
+        }
 
         VkBuffer getVertexBuffer() const { return vertexBuffer; }
         VkBuffer getIndexBuffer() const { return indexBuffer; }
 
-        const std::vector<Vertex>& getVertices() const { return vertices; }
+        const std::vector<Vertex_t>& getVertices() const { return vertices; }
         const std::vector<uint32_t>& getIndices() const { return indices; }
 
     private:
-        std::vector<Vertex> vertices;
+        std::vector<Vertex_t> vertices;
         std::vector<uint32_t> indices;
         VkBuffer vertexBuffer;
         VkDeviceMemory vertexBufferMemory;
@@ -49,6 +53,8 @@ namespace fly {
         void createVertexBuffer(const VkCommandPool commandPool);
         void createIndexBuffer(const VkCommandPool commandPool);
     };
+
+    using VertexArray = TVertexArray<Vertex>;
 
     std::unique_ptr<VertexArray> loadModel(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path filepath);
 
