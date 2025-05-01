@@ -1,7 +1,6 @@
 #pragma once
 
 #include "renderer/DefaultPipeline.hpp"
-#include "renderer/VertexArray.hpp"
 #include "renderer/ImGuiRenderer.hpp"
 #include "renderer/Texture.hpp"
 #include "renderer/vulkan/VulkanHelpers.hpp"
@@ -28,9 +27,9 @@
 #include <optional>
 #include <stdexcept>
 #include <vector>
-#include <set>
 #include <memory>
 #include <filesystem>
+#include <set>
 
 namespace fly {
 
@@ -43,13 +42,6 @@ static const char* const VIKING_TEXTURE_PATH = "res/viking_room.png";
 
 constexpr uint32_t WIDTH = 1280;
 constexpr uint32_t HEIGHT = 720;
-
-struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
-    float gamma;
-};
 
 static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -78,6 +70,7 @@ public:
             glfwPollEvents();
             
             imguiRenderer->setupFrame();
+            
             static glm::vec4 myColor;
             {
                 ImGui::Begin("Debug");
@@ -85,8 +78,8 @@ public:
                 ImGui::SliderFloat("Gamma", &gamma, 0, 3);
                 ImGui::End();
             }
+
             ImGui::Render();
-                
             drawFrame();
         }
 
@@ -110,15 +103,12 @@ private:
     VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
     
-    
     std::unique_ptr<DefaultPipeline> defaultPipeline;
     
     std::unique_ptr<TextureSampler> planeSampler, vikingSampler;
     std::unique_ptr<Texture> planeTexture, vikingTexture;
 
-    std::vector<VkBuffer> uniformBuffers;
-    std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*> uniformBuffersMapped;
+    std::unique_ptr<TUniformBuffer<DefaultUBO>> uniformBuffer;
 
     VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
     std::unique_ptr<Texture> colorTexture;
@@ -141,7 +131,7 @@ private:
         glfwInit();
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); //FIXME: this should be true
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
         this->window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
         glfwSetWindowUserPointer(this->window, this);
@@ -179,15 +169,14 @@ private:
         );
         this->vikingSampler = std::make_unique<TextureSampler>(this->vk, vikingTexture->getMipLevels());
 
-        createUniformBuffers();
+        this->uniformBuffer = std::make_unique<TUniformBuffer<DefaultUBO>>(this->vk);
 
         auto planeIdx = this->defaultPipeline->attachModel(
             loadModel(this->vk, this->commandPool, std::filesystem::path(PLANE_MODEL_PATH))
         );
         this->defaultPipeline->updateDescriptorSet(
             planeIdx, 
-            this->uniformBuffers, 
-            sizeof(UniformBufferObject), 
+            *this->uniformBuffer, 
             *this->planeTexture, 
             *this->planeSampler
         );
@@ -197,8 +186,7 @@ private:
         );
         this->defaultPipeline->updateDescriptorSet(
             vikingIdx, 
-            this->uniformBuffers, 
-            sizeof(UniformBufferObject), 
+            *this->uniformBuffer, 
             *this->vikingTexture, 
             *this->vikingSampler
         );
@@ -215,10 +203,7 @@ private:
         planeTexture.reset();
         vikingTexture.reset();
 
-        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            vkDestroyBuffer(vk.device, this->uniformBuffers[i], nullptr);
-            vkFreeMemory(vk.device, this->uniformBuffersMemory[i], nullptr);
-        }
+        uniformBuffer.reset();
 
         this->defaultPipeline.reset();
 
@@ -271,7 +256,7 @@ private:
         vkResetCommandBuffer(this->imguiRenderer->getCommandBuffer(this->currentFrame), 0);
         this->imguiRenderer->recordCommandBuffer(this->imguiRenderer->getCommandBuffer(this->currentFrame), imageIndex);
         
-        updateUniformBuffer(this->currentFrame);
+        updateUniformBuffer(); //TODO: should be modified
 
         {
             VkSubmitInfo submitInfo{};
@@ -341,13 +326,13 @@ private:
         this->currentFrame = (this->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    void updateUniformBuffer(uint32_t currentImage) {
+    void updateUniformBuffer() {
         static auto startTime = std::chrono::high_resolution_clock::now(); //FIXME: static not good
 
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        UniformBufferObject ubo{};
+        DefaultUBO ubo{};
         ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.model = glm::scale(ubo.model, glm::vec3(0.5));
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -357,7 +342,8 @@ private:
 
         ubo.gamma = this->gamma;
 
-        memcpy(this->uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+        this->uniformBuffer->updateUBO(ubo, this->currentFrame);
+        //memcpy(this->uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 
     void recreateSwapChain() {
@@ -416,27 +402,6 @@ private:
         );
     }
 
-    void createUniformBuffers() {
-        VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-
-        this->uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        this->uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-        this->uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
-
-        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            createBuffer(
-                this->vk,
-                bufferSize, 
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-                this->uniformBuffers[i], 
-                this->uniformBuffersMemory[i]
-            );
-
-            vkMapMemory(vk.device, this->uniformBuffersMemory[i], 0, bufferSize, 0, &this->uniformBuffersMapped[i]);
-        }
-    }
-
     void createSyncObjects() {
         this->imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         this->renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -484,6 +449,20 @@ private:
 
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(vk.swapChainExtent.width);
+        viewport.height = static_cast<float>(vk.swapChainExtent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = vk.swapChainExtent;
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        
         this->defaultPipeline->recordOnCommandBuffer(commandBuffer, this->currentFrame);
 
         vkCmdEndRenderPass(commandBuffer);

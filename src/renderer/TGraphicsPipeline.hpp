@@ -1,11 +1,12 @@
 #pragma once
 
-#include "VertexArray.hpp"
 #include "vulkan/VulkanConstants.h"
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanHelpers.hpp"
 
 #include <vector>
+#include <memory>
+#include <stdexcept>
 
 namespace fly {
     
@@ -21,10 +22,10 @@ namespace fly {
 
     */
     template<typename Vertex_t>
-    class GraphicsPipeline {
+    class TGraphicsPipeline {
     public:
-        GraphicsPipeline(const VulkanInstance& vk): vk{vk} {}
-        virtual ~GraphicsPipeline() {
+        TGraphicsPipeline(const VulkanInstance& vk): vk{vk} {}
+        virtual ~TGraphicsPipeline() {
             for(auto& mesh: meshes) {
                 vkDestroyDescriptorPool(vk.device, mesh.descriptorPool, nullptr);
                 mesh.vertexArray.reset();
@@ -46,11 +47,12 @@ namespace fly {
             this->pipelineLayout = layout;
         }
 
+        //unsigned attachModel(std::unique_ptr<TVertexArray<Vertex_t>> vertexArray, int instanceCount = 1);
         unsigned attachModel(std::unique_ptr<TVertexArray<Vertex_t>> vertexArray, int instanceCount = 1) {
             MeshData data;
             data.vertexArray = std::move(vertexArray);
             data.descriptorPool = createDescriptorPool();
-            data.descriptorSets = GraphicsPipeline::allocateDescriptorSets(this->vk, this->descriptorSetLayout, data.descriptorPool);
+            data.descriptorSets = TGraphicsPipeline::allocateDescriptorSets(this->vk, this->descriptorSetLayout, data.descriptorPool);
             data.instanceCount = instanceCount;
     
             unsigned i = meshes.size();
@@ -60,19 +62,6 @@ namespace fly {
 
         void recordOnCommandBuffer(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipeline);
-            VkViewport viewport{};
-            viewport.x = 0.0f;
-            viewport.y = 0.0f;
-            viewport.width = static_cast<float>(vk.swapChainExtent.width);
-            viewport.height = static_cast<float>(vk.swapChainExtent.height);
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-    
-            VkRect2D scissor{};
-            scissor.offset = {0, 0};
-            scissor.extent = vk.swapChainExtent;
-            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
     
             VkDeviceSize offsets[] = {0};
             for(const MeshData& mesh: this->meshes) {
@@ -86,29 +75,6 @@ namespace fly {
                 vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.vertexArray->getIndices().size()),
                     mesh.instanceCount, 0, 0, 0); 
             }
-    
-            /*VkDeviceSize offsets[] = {0};
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->defaultPipeline->pipelineLayout, 0, 1, &this->defaultPipeline->descriptorSets[this->currentFrame], 0, nullptr);
-            {
-                VkBuffer vertexBuffers[] = {this->vertexArrays[0]->getVertexBuffer()};
-                vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    
-                vkCmdBindIndexBuffer(commandBuffer, this->vertexArrays[0]->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-    
-                vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(this->vertexArrays[0]->getIndices().size()), 
-                    1, 0, 0, 0);
-            }
-            {
-                VkBuffer vertexBuffers[] = {this->vertexArrays[1]->getVertexBuffer()};
-                vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    
-                vkCmdBindIndexBuffer(commandBuffer, this->vertexArrays[1]->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-    
-                //vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->defaultPipeline->pipelineLayout, 0, 1, &this->defaultPipeline->descriptorSets[this->currentFrame], 0, nullptr);
-    
-                vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(this->vertexArrays[1]->getIndices().size()), 
-                    1, 0, 0, 0);
-            }*/
         }
 
     protected:
@@ -303,7 +269,6 @@ namespace fly {
 
         static std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> allocateDescriptorSets(
             const VulkanInstance& vk, 
-
             VkDescriptorSetLayout descriptorSetLayout,
             VkDescriptorPool descriptorPool
         ) {
