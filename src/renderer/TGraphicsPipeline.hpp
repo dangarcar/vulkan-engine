@@ -4,6 +4,7 @@
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanHelpers.hpp"
 
+#include <unordered_map>
 #include <vector>
 #include <memory>
 #include <stdexcept>
@@ -12,6 +13,13 @@ namespace fly {
     
     template<typename Vertex_t>
     class TVertexArray;
+
+    class IGraphicsPipeline {
+    public:
+        virtual void allocate(const VkRenderPass renderPass, const VkSampleCountFlagBits msaaSamples) = 0;
+        virtual void recordOnCommandBuffer(VkCommandBuffer commandBuffer, uint32_t currentFrame) = 0;
+        virtual ~IGraphicsPipeline() {}
+    };
 
     /**
     
@@ -22,11 +30,11 @@ namespace fly {
 
     */
     template<typename Vertex_t>
-    class TGraphicsPipeline {
+    class TGraphicsPipeline : public IGraphicsPipeline {
     public:
         TGraphicsPipeline(const VulkanInstance& vk): vk{vk} {}
         virtual ~TGraphicsPipeline() {
-            for(auto& mesh: meshes) {
+            for(auto& [k, mesh]: meshes) {
                 vkDestroyDescriptorPool(vk.device, mesh.descriptorPool, nullptr);
                 mesh.vertexArray.reset();
             }
@@ -47,7 +55,6 @@ namespace fly {
             this->pipelineLayout = layout;
         }
 
-        //unsigned attachModel(std::unique_ptr<TVertexArray<Vertex_t>> vertexArray, int instanceCount = 1);
         unsigned attachModel(std::unique_ptr<TVertexArray<Vertex_t>> vertexArray, int instanceCount = 1) {
             MeshData data;
             data.vertexArray = std::move(vertexArray);
@@ -55,16 +62,15 @@ namespace fly {
             data.descriptorSets = TGraphicsPipeline::allocateDescriptorSets(this->vk, this->descriptorSetLayout, data.descriptorPool);
             data.instanceCount = instanceCount;
     
-            unsigned i = meshes.size();
-            meshes.emplace_back(std::move(data));
-            return i;
+            meshes[globalId] = std::move(data);
+            return globalId++;
         }
 
         void recordOnCommandBuffer(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipeline);
     
             VkDeviceSize offsets[] = {0};
-            for(const MeshData& mesh: this->meshes) {
+            for(const auto& [k, mesh]: this->meshes) {
                 VkBuffer vertexBuffers[] = {mesh.vertexArray->getVertexBuffer()};
                 vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
     
@@ -80,12 +86,13 @@ namespace fly {
     protected:
         struct MeshData {
             std::unique_ptr<TVertexArray<Vertex_t>> vertexArray;
-            VkDescriptorPool descriptorPool;
+            VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
             std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> descriptorSets;
             int instanceCount;
         }; 
 
-        std::vector<MeshData> meshes;
+        unsigned globalId = 0;
+        std::unordered_map<unsigned, MeshData> meshes;
         const VulkanInstance& vk;
 
         virtual std::vector<char> getVertShaderCode() = 0;
@@ -96,9 +103,9 @@ namespace fly {
 
     
     private:
-        VkDescriptorSetLayout descriptorSetLayout;
-        VkPipelineLayout pipelineLayout;
-        VkPipeline graphicsPipeline;
+        VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+        VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+        VkPipeline graphicsPipeline = VK_NULL_HANDLE;
     
     private:
         static std::pair<VkPipeline, VkPipelineLayout> createGraphicsPipeline(

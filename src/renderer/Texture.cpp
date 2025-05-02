@@ -82,7 +82,6 @@ namespace fly {
         transitionImageLayout(
             vk, commandPool,
             this->image, 
-            format, 
             VK_IMAGE_LAYOUT_UNDEFINED, 
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             this->mipLevels

@@ -433,7 +433,6 @@ namespace fly {
         const VkCommandPool commandPool,
 
         VkImage image, 
-        VkFormat format, 
         VkImageLayout oldLayout, 
         VkImageLayout newLayout, 
         uint32_t mipLevels

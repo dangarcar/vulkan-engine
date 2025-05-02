@@ -37,6 +37,12 @@ add_library(engine STATIC ${sources})
 target_link_libraries(engine PUBLIC glfw ${GLFW_LIBRARIES} Vulkan::Vulkan glm imgui)
 target_include_directories(engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+if(MSVC)
+	target_compile_options(engine PRIVATE /W4 /WX)
+else()
+	target_compile_options(engine PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
 # Test executable
 add_executable(EngineTest test/test.cpp)
 target_link_libraries(EngineTest engine)

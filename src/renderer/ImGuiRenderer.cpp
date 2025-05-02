@@ -1,5 +1,6 @@
 #include "ImGuiRenderer.hpp"
 
+#include <cstddef>
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
@@ -187,7 +188,7 @@ namespace fly {
     void ImGuiRenderer::createFramebuffers() {
         this->imguiFramebuffers.resize(vk.swapChainImageViews.size());
 
-        for(int i=0; i<vk.swapChainImageViews.size(); i++) {
+        for(size_t i=0; i<vk.swapChainImageViews.size(); i++) {
             VkImageView attachments[] = {
                 vk.swapChainImageViews[i]
             };

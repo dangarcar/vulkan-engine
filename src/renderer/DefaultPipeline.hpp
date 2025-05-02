@@ -37,7 +37,7 @@ namespace fly {
     class DefaultPipeline: public TGraphicsPipeline<Vertex> {
     public:
         DefaultPipeline(const VulkanInstance& vk): TGraphicsPipeline{vk} {}
-        virtual ~DefaultPipeline() {}
+        ~DefaultPipeline() = default;
     
         void updateDescriptorSet(
             unsigned meshIndex,
