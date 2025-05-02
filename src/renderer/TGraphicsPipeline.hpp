@@ -4,9 +4,11 @@
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanHelpers.hpp"
 
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <queue>
 #include <stdexcept>
 
 namespace fly {
@@ -18,6 +20,7 @@ namespace fly {
     public:
         virtual void allocate(const VkRenderPass renderPass, const VkSampleCountFlagBits msaaSamples) = 0;
         virtual void recordOnCommandBuffer(VkCommandBuffer commandBuffer, uint32_t currentFrame) = 0;
+        virtual void update(uint32_t currentFrame) = 0;
         virtual ~IGraphicsPipeline() {}
     };
 
@@ -35,8 +38,16 @@ namespace fly {
         TGraphicsPipeline(const VulkanInstance& vk): vk{vk} {}
         virtual ~TGraphicsPipeline() {
             for(auto& [k, mesh]: meshes) {
-                vkDestroyDescriptorPool(vk.device, mesh.descriptorPool, nullptr);
-                mesh.vertexArray.reset();
+                ModelDetachInfo info;
+                info.data = std::move( this->meshes.extract(k).mapped() );
+                this->pendingDetach.push(std::move(info));
+            }
+
+            while(!this->pendingDetach.empty()) {
+                ModelDetachInfo& info = this->pendingDetach.front();
+                vkDestroyDescriptorPool(vk.device, info.data.descriptorPool, nullptr);
+                info.data.vertexArray.reset();
+                this->pendingDetach.pop();
             }
 
             vkDestroyDescriptorSetLayout(vk.device, this->descriptorSetLayout, nullptr);
@@ -64,6 +75,26 @@ namespace fly {
     
             meshes[globalId] = std::move(data);
             return globalId++;
+        }
+
+        void update(uint32_t currentFrame) override {
+            while(!this->pendingDetach.empty()) {
+                ModelDetachInfo& info = this->pendingDetach.front();
+                if(info.currentFrame != currentFrame)
+                    break;
+
+                vkDestroyDescriptorPool(vk.device, info.data.descriptorPool, nullptr);
+                info.data.vertexArray.reset();
+                this->pendingDetach.pop();
+            }
+        }
+
+        void detachModel(unsigned id, uint32_t currentFrame) {
+            ModelDetachInfo info;
+            info.data = std::move( this->meshes.extract(id).mapped() );
+            info.currentFrame = currentFrame;
+
+            this->pendingDetach.push(std::move(info));
         }
 
         void recordOnCommandBuffer(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
@@ -94,6 +125,9 @@ namespace fly {
         unsigned globalId = 0;
         std::unordered_map<unsigned, MeshData> meshes;
         const VulkanInstance& vk;
+
+        struct ModelDetachInfo { MeshData data; uint32_t currentFrame; };
+        std::queue<ModelDetachInfo> pendingDetach;
 
         virtual std::vector<char> getVertShaderCode() = 0;
         virtual std::vector<char> getFragShaderCode() = 0;

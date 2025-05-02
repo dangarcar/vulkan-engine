@@ -19,7 +19,7 @@ namespace fly {
     class Scene {
     public:
         virtual void init(Engine& engine) = 0;
-        virtual void run(double dt, uint32_t currentFrame, const VulkanInstance& vk, const Window& window) = 0;
+        virtual void run(double dt, uint32_t currentFrame, const Engine& engine) = 0;
         virtual ~Scene() {}
     };
 

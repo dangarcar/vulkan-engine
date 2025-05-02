@@ -33,16 +33,16 @@ namespace fly {
 
         GLFWwindow* getGlfwWindow() { return window; }
 
-        bool isKeyPressed(int glfwKey) { return keyStates[glfwKey]; }
-        bool keyJustPressed(int glfwKey) { return oldKeyStates[glfwKey] == false && keyStates[glfwKey] == true; }
-        bool keyJustReleased(int glfwKey) { return oldKeyStates[glfwKey] == true && keyStates[glfwKey] == false; }
+        bool isKeyPressed(int glfwKey) const { return keyStates[glfwKey]; }
+        bool keyJustPressed(int glfwKey) const { return oldKeyStates[glfwKey] == false && keyStates[glfwKey] == true; }
+        bool keyJustReleased(int glfwKey) const { return oldKeyStates[glfwKey] == true && keyStates[glfwKey] == false; }
 
-        glm::vec2 getMousePos() { return mousePos; }
-        glm::vec2 getMouseDelta() { return mousePos - oldMousePos; }
+        glm::vec2 getMousePos() const { return mousePos; }
+        glm::vec2 getMouseDelta() const { return mousePos - oldMousePos; }
 
-        bool isMouseBtnPressed(MouseButton btn) { return btnPress[static_cast<int>(btn)]; }
-        bool mouseClicked(MouseButton btn) { return oldBtnPress[static_cast<int>(btn)] == false && btnPress[static_cast<int>(btn)] == true; }
-        bool mouseReleased(MouseButton btn) { return oldBtnPress[static_cast<int>(btn)] == true && btnPress[static_cast<int>(btn)] == false; }
+        bool isMouseBtnPressed(MouseButton btn) const { return btnPress[static_cast<int>(btn)]; }
+        bool mouseClicked(MouseButton btn) const { return oldBtnPress[static_cast<int>(btn)] == false && btnPress[static_cast<int>(btn)] == true; }
+        bool mouseReleased(MouseButton btn) const { return oldBtnPress[static_cast<int>(btn)] == true && btnPress[static_cast<int>(btn)] == false; }
 
 
     private:

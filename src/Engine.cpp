@@ -62,14 +62,16 @@ namespace fly {
             time = std::chrono::system_clock::now();
 
             window.handleInput();
-            
+            for(auto& pipeline: this->graphicPipelines) {
+                pipeline->update(this->currentFrame);
+            }
+
             imguiRenderer->setupFrame();
 
             this->scene->run(
                 std::chrono::duration<double, std::chrono::seconds::period>(lastTime - time).count(), 
                 this->currentFrame,
-                this->vk,
-                this->window
+                *this
             );
 
             ImGui::Render();

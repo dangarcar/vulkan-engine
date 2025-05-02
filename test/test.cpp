@@ -4,11 +4,14 @@
 #include <iostream>
 #include <imgui.h>
 #include <memory>
+#include <vector>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
+#include <GLFW/glfw3.h>
 
 static const char* const IMAGE_SRC = "test/res/texture.jpg";
 static const char* const VIKING_MODEL_PATH = "test/res/viking_room.obj";
@@ -40,17 +43,8 @@ public:
 
         this->uniformBuffer = std::make_unique<fly::TUniformBuffer<fly::DefaultUBO>>(engine.getVulkanInstance());
 
-        auto planeIdx = defaultPipeline->attachModel(
-            loadModel(engine.getVulkanInstance(), engine.getCommandPool(), std::filesystem::path(PLANE_MODEL_PATH))
-        );
-        this->defaultPipeline->updateDescriptorSet(
-            planeIdx, 
-            *uniformBuffer, 
-            *planeTexture, 
-            *planeSampler
-        );
-        
-        auto vikingIdx = defaultPipeline->attachModel(
+
+        this->vikingIdx = defaultPipeline->attachModel(
             loadModel(engine.getVulkanInstance(), engine.getCommandPool(), std::filesystem::path(VIKING_MODEL_PATH))
         );
         this->defaultPipeline->updateDescriptorSet(
@@ -59,10 +53,18 @@ public:
             *vikingTexture, 
             *vikingSampler
         );
+
+
+        auto planeVAO = loadModel(engine.getVulkanInstance(), engine.getCommandPool(), std::filesystem::path(PLANE_MODEL_PATH));
+        this->vertices = planeVAO->getVertices();
+        this->indices = planeVAO->getIndices();
     }
 
 
-    void run(double dt, uint32_t currentFrame, const fly::VulkanInstance& vk, const fly::Window& window) override {
+    void run(double dt, uint32_t currentFrame, const fly::Engine& engine) override {
+        auto& window = engine.getWindow();
+        auto& vk = engine.getVulkanInstance();
+        
         {
             ImGui::Begin("Debug");
             ImGui::ColorEdit4("Color", &myColor[0]);
@@ -70,6 +72,25 @@ public:
             ImGui::End();
         }
     
+        if(window.keyJustPressed(GLFW_KEY_F)) {
+            auto vertices = this->vertices;
+            auto indices = this->indices;
+
+            this->planeIdx = defaultPipeline->attachModel(
+                std::make_unique<fly::VertexArray>(vk, engine.getCommandPool(), std::move(vertices), std::move(indices))
+            );
+            this->defaultPipeline->updateDescriptorSet(
+                planeIdx, 
+                *uniformBuffer, 
+                *planeTexture, 
+                *planeSampler
+            );
+        }
+
+        if(window.keyJustReleased(GLFW_KEY_F)) {
+            this->defaultPipeline->detachModel(this->planeIdx, currentFrame);
+        }
+
         totalTime += dt;
         fly::DefaultUBO ubo{};
         ubo.model = glm::rotate(glm::mat4(1.0f), (float)totalTime * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -84,10 +105,14 @@ public:
         uniformBuffer->updateUBO(ubo, currentFrame);
     }
     
-    
 
 private:
     fly::DefaultPipeline* defaultPipeline = nullptr;
+
+    unsigned planeIdx, vikingIdx;
+
+    std::vector<fly::Vertex> vertices;
+    std::vector<uint32_t> indices;
 
     std::unique_ptr<fly::TextureSampler> planeSampler, vikingSampler;
     std::unique_ptr<fly::Texture> planeTexture, vikingTexture;
