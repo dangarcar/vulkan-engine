@@ -10,8 +10,8 @@
 
 #include <glm/glm.hpp>
 
-static const char* const FRAG_SHADER_SRC = "shaders/frag.spv";
-static const char* const VERT_SHADER_SRC = "shaders/vert.spv";
+static const char* const DEFAULT_FRAG_SHADER_SRC = "shaders/frag.spv";
+static const char* const DEFAULT_VERT_SHADER_SRC = "shaders/vert.spv";
 
 namespace fly {
     
@@ -50,10 +50,10 @@ namespace fly {
     private:
     
         std::vector<char> getVertShaderCode() override {
-            return readFile(VERT_SHADER_SRC);
+            return readFile(DEFAULT_VERT_SHADER_SRC);
         }
         std::vector<char> getFragShaderCode() override {
-            return readFile(FRAG_SHADER_SRC);
+            return readFile(DEFAULT_FRAG_SHADER_SRC);
         }
 
         VkDescriptorSetLayout createDescriptorSetLayout() override;

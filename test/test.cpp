@@ -41,6 +41,14 @@ public:
         );
         this->vikingSampler = std::make_unique<fly::TextureSampler>(engine.getVulkanInstance(), vikingTexture->getMipLevels());
 
+        //FIXME:
+        this->texture = std::make_unique<fly::Texture>(
+            engine.getVulkanInstance(), engine.getCommandPool(), std::filesystem::path(IMAGE_SRC), 
+            fly::STB_Format::STBI_rgb_alpha, VK_FORMAT_R8G8B8A8_SRGB
+        );
+        this->sampler = std::make_unique<fly::TextureSampler>(engine.getVulkanInstance(), texture->getMipLevels());
+        
+
         this->uniformBuffer = std::make_unique<fly::TUniformBuffer<fly::DefaultUBO>>(engine.getVulkanInstance());
 
 
@@ -61,7 +69,7 @@ public:
     }
 
 
-    void run(double dt, uint32_t currentFrame, const fly::Engine& engine) override {
+    void run(double dt, uint32_t currentFrame, fly::Engine& engine) override {
         auto& window = engine.getWindow();
         auto& vk = engine.getVulkanInstance();
         
@@ -103,6 +111,16 @@ public:
         ubo.gamma = gamma;
     
         uniformBuffer->updateUBO(ubo, currentFrame);
+
+
+        //FIXME: #pragma omp
+        engine.getRenderer().renderTexture(
+            currentFrame, 
+            *texture, 
+            *sampler, 
+            {200, 320}, 
+            {400, 400}
+        );
     }
     
 
@@ -114,8 +132,8 @@ private:
     std::vector<fly::Vertex> vertices;
     std::vector<uint32_t> indices;
 
-    std::unique_ptr<fly::TextureSampler> planeSampler, vikingSampler;
-    std::unique_ptr<fly::Texture> planeTexture, vikingTexture;
+    std::unique_ptr<fly::TextureSampler> planeSampler, vikingSampler, sampler;
+    std::unique_ptr<fly::Texture> planeTexture, vikingTexture, texture;
     std::unique_ptr<fly::TUniformBuffer<fly::DefaultUBO>> uniformBuffer;
 
     float gamma = 1.0f;

@@ -3,6 +3,7 @@
 #include "renderer/TGraphicsPipeline.hpp"
 #include "renderer/vulkan/VulkanTypes.h"
 #include "renderer/ImGuiRenderer.hpp"
+#include "renderer/Renderer.hpp"
 
 #include "Window.hpp"
 
@@ -14,12 +15,12 @@ namespace fly {
     class Texture;
     class TextureSampler;
     class ImGuiRenderer;
-
     class Engine;
+    
     class Scene {
     public:
         virtual void init(Engine& engine) = 0;
-        virtual void run(double dt, uint32_t currentFrame, const Engine& engine) = 0;
+        virtual void run(double dt, uint32_t currentFrame, Engine& engine) = 0;
         virtual ~Scene() {}
     };
 
@@ -51,6 +52,7 @@ namespace fly {
         const Window& getWindow() const { return this->window; }
         const VulkanInstance& getVulkanInstance() const { return this->vk; } 
         VkCommandPool getCommandPool() const { return this->commandPool; }
+        Renderer& getRenderer() { return *this->renderer; }
 
     private:
         std::unique_ptr<Scene> scene;
@@ -60,6 +62,7 @@ namespace fly {
 
         Window window;
         std::unique_ptr<ImGuiRenderer> imguiRenderer;
+        std::unique_ptr<Renderer> renderer;
 
         uint32_t currentFrame = 0;
         

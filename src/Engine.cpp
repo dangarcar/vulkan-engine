@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <imgui.h>
 
-#include <iostream>
+#include <memory>
 #include <set>
 
 
@@ -53,6 +53,8 @@ namespace fly {
     
         
         imguiRenderer = std::make_unique<ImGuiRenderer>(this->window.getGlfwWindow(), this->vk);
+
+        this->renderer = std::make_unique<Renderer>(*this);
     }
 
     void Engine::run() {
@@ -62,6 +64,10 @@ namespace fly {
             time = std::chrono::system_clock::now();
 
             window.handleInput();
+            if(window.isFramebufferResized()) {
+                this->renderer->resize(window.getWidth(), window.getHeight());
+            }
+            //renderer->update(*this);
             for(auto& pipeline: this->graphicPipelines) {
                 pipeline->update(this->currentFrame);
             }
@@ -76,6 +82,7 @@ namespace fly {
 
             ImGui::Render();
             drawFrame();
+            
         }
     }
 
@@ -83,6 +90,7 @@ namespace fly {
         vkDeviceWaitIdle(vk.device);
 
         this->scene.reset();
+        renderer.reset();
         imguiRenderer.reset();
         cleanup();
     }

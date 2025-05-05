@@ -1,9 +1,24 @@
 #include "Texture.hpp"
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
 #include "vulkan/VulkanHelpers.hpp"
+
+namespace std {
+
+    size_t hash<fly::TextureRef>::operator()(fly::TextureRef const& texture) const {
+        return ((hash<glm::vec<3, uint64_t>>()({
+            reinterpret_cast<uint64_t>(texture.image),
+            reinterpret_cast<uint64_t>(texture.imageView),
+            texture.mipLevels
+        })));
+    }
+
+}
 
 namespace fly {
 

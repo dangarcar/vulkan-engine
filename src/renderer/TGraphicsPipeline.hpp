@@ -55,7 +55,7 @@ namespace fly {
             vkDestroyPipelineLayout(vk.device, this->pipelineLayout, nullptr);
         }
 
-        void allocate(const VkRenderPass renderPass, const VkSampleCountFlagBits msaaSamples) {
+        void allocate(const VkRenderPass renderPass, const VkSampleCountFlagBits msaaSamples) override {
             this->descriptorSetLayout = createDescriptorSetLayout();
             
             auto [pipeline, layout] = createGraphicsPipeline(
@@ -97,7 +97,7 @@ namespace fly {
             this->pendingDetach.push(std::move(info));
         }
 
-        void recordOnCommandBuffer(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
+        void recordOnCommandBuffer(VkCommandBuffer commandBuffer, uint32_t currentFrame) override {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipeline);
     
             VkDeviceSize offsets[] = {0};
