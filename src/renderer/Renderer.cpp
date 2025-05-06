@@ -17,7 +17,6 @@ namespace fly {
     }
 
     void Renderer::renderTexture(
-        uint32_t currentFrame,
         const Texture& texture, 
         const TextureSampler& textureSampler, 
         glm::vec2 origin, 
@@ -28,42 +27,62 @@ namespace fly {
         if(centre)
             origin -= size / 2.0f;
 
-        if(textureData.count(texture.toRef()) == 0) {
-            TextureData data;
-            data.uniformBuffer = std::make_unique<TUniformBuffer<UBO2D>>(this->vk);
-            
-            auto vertices = this->vertices;
-            auto indices = this->indices;
-            data.meshIdx = this->pipeline2d->attachModel(std::make_unique<Vertex2DArray>(
-                this->vk, commandPool, std::move(vertices), std::move(indices)
-            ));
-
-            this->pipeline2d->updateDescriptorSet(
-                data.meshIdx, 
-                *data.uniformBuffer, 
-                texture, 
-                textureSampler
-            );
-
-            this->textureData[texture.toRef()] = std::move(data);
-        }
-
-        UBO2D ubo;
-        ubo.proj = this->orthoProj;
+        auto transform = glm::mat4(1.0f);
+        transform = glm::translate(transform, glm::vec3(origin, 0));
+        transform = glm::scale(transform, glm::vec3(size, 1));
         
-        ubo.model = glm::mat4(1.0f);
-        ubo.model = glm::translate(ubo.model, glm::vec3(origin, 0));
-        ubo.model = glm::scale(ubo.model, glm::vec3(size, 1));
-
+        UBO2D ubo;
+        ubo.proj = this->orthoProj * transform;
         ubo.modColor = modColor;
         ubo.useTexture = 1;
-        this->textureData[texture.toRef()].uniformBuffer->updateUBO(ubo, currentFrame);
+
+        this->textureRenderQueue[texture.toRef()].push_back(
+            {texture, textureSampler, ubo}
+        );
     }
 
     void Renderer::resize(int width, int height) {
         this->orthoProj = glm::ortho(0.0f, (float)width, 0.0f, (float)height);
     }
 
+    void Renderer::render(uint32_t currentFrame) {
+        for(auto& [k, v]: this->textureRenderQueue) {
+            if(this->textureData[k].size() > v.size()) {
+                while(this->textureData[k].size() != v.size()) {   
+                    auto& data = this->textureData[k].back();
+                    this->pipeline2d->detachModel(data.meshIdx, currentFrame);
+                    this->textureData[k].pop_back();
+                }
+            } 
+            else if(textureData[k].size() < v.size()) {
+                while(this->textureData[k].size() != v.size()) {
+                    TextureData data;
+                    data.uniformBuffer = std::make_unique<TUniformBuffer<UBO2D>>(this->vk);
+
+                    auto vertices = this->vertices;
+                    auto indices = this->indices;
+                    data.meshIdx = this->pipeline2d->attachModel(std::make_unique<Vertex2DArray>(
+                        this->vk, commandPool, std::move(vertices), std::move(indices)
+                    ));
+                
+                    this->pipeline2d->updateDescriptorSet(
+                        data.meshIdx, 
+                        *data.uniformBuffer, 
+                        v[0].texture, 
+                        v[0].textureSampler
+                    );
+                
+                    this->textureData[k].emplace_back(std::move(data));
+                }
+            }
+
+            for(size_t i=0; i<v.size(); ++i) {
+                this->textureData[k][i].uniformBuffer->updateUBO(this->textureRenderQueue[k][i].ubo, currentFrame);
+            }
+        }
+
+        this->textureRenderQueue.clear();
+    }
 
     //2D PIPELINE IMPLEMENTATION
     void GPipeline2D::updateDescriptorSet(

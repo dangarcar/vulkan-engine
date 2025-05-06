@@ -115,11 +115,16 @@ public:
 
         //FIXME: #pragma omp
         engine.getRenderer().renderTexture(
-            currentFrame, 
             *texture, 
             *sampler, 
             {200, 320}, 
             {400, 400}
+        );
+        engine.getRenderer().renderTexture(
+            *texture, 
+            *sampler, 
+            {1000, 20}, 
+            {100, 100}
         );
     }
     

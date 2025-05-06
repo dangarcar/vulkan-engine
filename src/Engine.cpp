@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <imgui.h>
 
+#include <iostream>
 #include <memory>
 #include <set>
 
@@ -67,7 +68,6 @@ namespace fly {
             if(window.isFramebufferResized()) {
                 this->renderer->resize(window.getWidth(), window.getHeight());
             }
-            //renderer->update(*this);
             for(auto& pipeline: this->graphicPipelines) {
                 pipeline->update(this->currentFrame);
             }
@@ -80,9 +80,9 @@ namespace fly {
                 *this
             );
 
+            this->renderer->render(this->currentFrame);
             ImGui::Render();
             drawFrame();
-            
         }
     }
 

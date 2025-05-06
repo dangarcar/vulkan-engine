@@ -2,7 +2,6 @@
 
 layout(binding = 0) uniform UBO2D {
     mat4 proj;
-    mat4 model;
     vec4 modColor;
     int useTexture;
 } ubo;
@@ -15,7 +14,7 @@ layout(location = 1) out vec4 modColor;
 layout(location = 2) out int useTexture;
 
 void main() {
-    gl_Position = ubo.proj * ubo.model * vec4(inPosition, 0, 1);
+    gl_Position = ubo.proj * vec4(inPosition, 0, 1);
     
     fragTexCoord = inTexCoord;
     modColor = ubo.modColor;

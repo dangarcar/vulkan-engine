@@ -25,7 +25,6 @@ namespace fly {
 
     struct UBO2D {
         alignas(16) glm::mat4 proj;
-        alignas(16) glm::mat4 model; 
         glm::vec4 modColor;
         int useTexture;
     };
@@ -51,7 +50,6 @@ namespace fly {
         void resize(int width, int height);
 
         void renderTexture(
-            uint32_t currentFrame,
             const Texture& texture, 
             const TextureSampler& textureSampler, 
             glm::vec2 origin, 
@@ -60,15 +58,24 @@ namespace fly {
             glm::vec4 modColor = {1,1,1,1}
         );
 
+        void render(uint32_t currentFrame);
+
     private:
         GPipeline2D* pipeline2d;
 
+        struct TextureRender {
+            const Texture& texture; 
+            const TextureSampler& textureSampler; 
+            UBO2D ubo;
+        };
         struct TextureData {
             unsigned meshIdx;
             std::unique_ptr<TUniformBuffer<UBO2D>> uniformBuffer;
         };
-        std::unordered_map<TextureRef, TextureData> textureData;
-        
+        std::unordered_map<TextureRef, std::vector<TextureData>> textureData;
+
+        std::unordered_map<TextureRef, std::vector<TextureRender>> textureRenderQueue;
+
         const VulkanInstance& vk;
         const VkCommandPool commandPool;
         glm::mat4 orthoProj;

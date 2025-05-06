@@ -37,7 +37,12 @@ namespace fly {
     public:
         TGraphicsPipeline(const VulkanInstance& vk): vk{vk} {}
         virtual ~TGraphicsPipeline() {
-            for(auto& [k, mesh]: meshes) {
+            std::vector<unsigned> keys;
+            keys.reserve(this->meshes.size());
+            for(auto& e: this->meshes)
+                keys.push_back(e.first);
+
+            for(auto k: keys) {
                 ModelDetachInfo info;
                 info.data = std::move( this->meshes.extract(k).mapped() );
                 this->pendingDetach.push(std::move(info));
