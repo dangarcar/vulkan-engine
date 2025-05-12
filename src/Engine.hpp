@@ -1,14 +1,14 @@
 #pragma once
 
 #include "renderer/TGraphicsPipeline.hpp"
+#include "renderer/TextRenderer.hpp"
 #include "renderer/vulkan/VulkanTypes.h"
 #include "renderer/ImGuiRenderer.hpp"
 #include "renderer/Renderer.hpp"
 
 #include "Window.hpp"
+#include <algorithm>
 
-#include <memory>
-#include <type_traits>
 
 namespace fly {
  
@@ -40,12 +40,13 @@ namespace fly {
         }
 
         template<typename T>
-        T* addPipeline() {
+        T* addPipeline(int priority) {
             static_assert(std::is_base_of<IGraphicsPipeline, T>::value);
             auto pip = std::make_unique<T>(this->vk);
             auto ptr = pip.get();
             pip->allocate(this->renderPass, this->msaaSamples);
-            graphicPipelines.emplace_back(std::move(pip));
+            graphicPipelines.emplace_back(std::make_pair(priority, std::move(pip)));
+            std::sort(graphicPipelines.begin(), graphicPipelines.end());
             return ptr;
         }
     
@@ -53,6 +54,7 @@ namespace fly {
         const VulkanInstance& getVulkanInstance() const { return this->vk; } 
         VkCommandPool getCommandPool() const { return this->commandPool; }
         Renderer& getRenderer() { return *this->renderer; }
+        TextRenderer& getTextRenderer() { return *this->textRenderer; }
 
     private:
         std::unique_ptr<Scene> scene;
@@ -63,6 +65,7 @@ namespace fly {
         Window window;
         std::unique_ptr<ImGuiRenderer> imguiRenderer;
         std::unique_ptr<Renderer> renderer;
+        std::unique_ptr<TextRenderer> textRenderer;
 
         uint32_t currentFrame = 0;
         
@@ -73,8 +76,7 @@ namespace fly {
         std::vector<VkFramebuffer> swapChainFramebuffers;
         std::vector<VkCommandBuffer> commandBuffers;
         
-        //std::unique_ptr<DefaultPipeline> defaultPipeline;
-        std::vector<std::unique_ptr<IGraphicsPipeline>> graphicPipelines;
+        std::vector<std::pair<int, std::unique_ptr<IGraphicsPipeline>>> graphicPipelines;
 
 
         VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;

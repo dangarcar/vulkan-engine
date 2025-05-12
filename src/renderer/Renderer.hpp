@@ -31,7 +31,6 @@ namespace fly {
 
     struct Vertex2D {
         glm::vec2 pos;
-        glm::vec2 texCoord;
     
         static VkVertexInputBindingDescription getBindingDescription();
     
@@ -58,7 +57,9 @@ namespace fly {
             glm::vec4 modColor = {1,1,1,1}
         );
 
+    private:
         void render(uint32_t currentFrame);
+        friend class Engine;
 
     private:
         GPipeline2D* pipeline2d;
@@ -81,10 +82,10 @@ namespace fly {
         glm::mat4 orthoProj;
 
         const std::vector<Vertex2D> vertices = {
-            {{0.0f, 0.0f}, {0.0f, 0.0f}},
-            {{1.0f, 0.0f}, {1.0f, 0.0f}},
-            {{1.0f, 1.0f}, {1.0f, 1.0f}},
-            {{0.0f, 1.0f}, {0.0f, 1.0f}}
+            {{0.0f, 0.0f}},
+            {{1.0f, 0.0f}},
+            {{1.0f, 1.0f}},
+            {{0.0f, 1.0f}}
         };
 
         const std::vector<uint32_t> indices { 0, 2, 1, 2, 0, 3 };
@@ -115,7 +116,6 @@ namespace fly {
         }
 
         VkDescriptorSetLayout createDescriptorSetLayout() override;
-    
         VkDescriptorPool createDescriptorPool() override;
 
     };

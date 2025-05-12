@@ -12,7 +12,7 @@ namespace fly {
 
     // RENDERER IMPLEMENTATION
     Renderer::Renderer(Engine& engine): vk{engine.getVulkanInstance()}, commandPool{engine.getCommandPool()} {
-        this->pipeline2d = engine.addPipeline<GPipeline2D>();
+        this->pipeline2d = engine.addPipeline<GPipeline2D>(1000);
         this->orthoProj = glm::ortho(0.0f, (float)vk.swapChainExtent.width, 0.0f, (float)vk.swapChainExtent.height);
     }
 
@@ -93,7 +93,6 @@ namespace fly {
         const TextureSampler& textureSampler
     ) {
         assert(this->meshes[meshIndex].descriptorSets.size() == MAX_FRAMES_IN_FLIGHT && "Descriptor set vector bad size!");
-
 
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
             VkDescriptorBufferInfo bufferInfo{};
@@ -191,22 +190,17 @@ namespace fly {
     }
     
     std::vector<VkVertexInputAttributeDescription> Vertex2D::getAttributeDescriptions() {
-        std::vector<VkVertexInputAttributeDescription> attributeDescriptions(2);
+        std::vector<VkVertexInputAttributeDescription> attributeDescriptions(1);
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
         attributeDescriptions[0].offset = offsetof(Vertex2D, pos);
 
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex2D, texCoord);
-
         return attributeDescriptions;
     }
 
     bool Vertex2D::operator==(const Vertex2D& other) const {
-        return pos == other.pos && texCoord == other.texCoord;
+        return pos == other.pos;
     }
 
 }

@@ -1,9 +1,5 @@
 #include "Engine.hpp"
 
-#include "Window.hpp"
-#include "renderer/Texture.hpp"
-#include "renderer/ImGuiRenderer.hpp"
-
 #include <chrono>
 #include <cstdint>
 #include <imgui.h>
@@ -56,6 +52,7 @@ namespace fly {
         imguiRenderer = std::make_unique<ImGuiRenderer>(this->window.getGlfwWindow(), this->vk);
 
         this->renderer = std::make_unique<Renderer>(*this);
+        this->textRenderer = std::make_unique<TextRenderer>(*this);
     }
 
     void Engine::run() {
@@ -67,8 +64,9 @@ namespace fly {
             window.handleInput();
             if(window.isFramebufferResized()) {
                 this->renderer->resize(window.getWidth(), window.getHeight());
+                this->textRenderer->resize(window.getWidth(), window.getHeight());
             }
-            for(auto& pipeline: this->graphicPipelines) {
+            for(auto& [p, pipeline]: this->graphicPipelines) {
                 pipeline->update(this->currentFrame);
             }
 
@@ -81,6 +79,7 @@ namespace fly {
             );
 
             this->renderer->render(this->currentFrame);
+            this->textRenderer->render(this->currentFrame);
             ImGui::Render();
             drawFrame();
         }
@@ -90,8 +89,9 @@ namespace fly {
         vkDeviceWaitIdle(vk.device);
 
         this->scene.reset();
-        renderer.reset();
-        imguiRenderer.reset();
+        this->textRenderer.reset();
+        this->renderer.reset();
+        this->imguiRenderer.reset();
         cleanup();
     }
 
@@ -258,7 +258,7 @@ namespace fly {
         scissor.extent = vk.swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
         
-        for(auto& pipeline: this->graphicPipelines) {
+        for(auto& [p, pipeline]: this->graphicPipelines) {
             pipeline->recordOnCommandBuffer(commandBuffer, this->currentFrame);
         }
 
@@ -654,7 +654,6 @@ namespace fly {
             }
         }
     }
-
 
 
 }

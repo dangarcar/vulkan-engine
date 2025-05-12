@@ -27,7 +27,13 @@ public:
     ~Game() = default;
     
     void init(fly::Engine& engine) override {
-        this->defaultPipeline = engine.addPipeline<fly::DefaultPipeline>();
+        engine.getTextRenderer().loadFont( //FIXME:
+            "DS_DIGITAL", 
+            std::filesystem::path("test/res/font.png"), 
+            std::filesystem::path("test/res/font.json")
+        );
+
+        this->defaultPipeline = engine.addPipeline<fly::DefaultPipeline>(0);
 
         this->planeTexture = std::make_unique<fly::Texture>(
             engine.getVulkanInstance(), engine.getCommandPool(), std::filesystem::path(PLANE_TEXTURE_PATH), 
@@ -112,19 +118,30 @@ public:
     
         uniformBuffer->updateUBO(ubo, currentFrame);
 
-
-        //FIXME: #pragma omp
+        //RENDER TEXTURE
         engine.getRenderer().renderTexture(
             *texture, 
             *sampler, 
-            {200, 320}, 
-            {400, 400}
+            {1100, 20}, 
+            {50, 50}
         );
         engine.getRenderer().renderTexture(
             *texture, 
             *sampler, 
             {1000, 20}, 
             {100, 100}
+        );
+
+        engine.getTextRenderer().renderText(
+            "DS_DIGITAL", 
+            "HELLO_WORLD!\nME GUSTA EL ARROZ", 
+            {600, 0}, fly::Align::CENTER, 40.0, {1, 1, 1, 1}
+        );
+
+        engine.getTextRenderer().renderText(
+            "DS_DIGITAL", 
+            "BYE!", 
+            {0, 0}, fly::Align::LEFT, 300.0, {1, 1, 1, 1}
         );
     }
     

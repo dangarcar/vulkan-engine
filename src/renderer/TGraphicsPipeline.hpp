@@ -4,6 +4,7 @@
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanHelpers.hpp"
 
+#include <cassert>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -117,6 +118,13 @@ namespace fly {
                 vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.vertexArray->getIndices().size()),
                     mesh.instanceCount, 0, 0, 0); 
             }
+        }
+
+        void setInstanceCount(unsigned meshIndex, int instanceCount) {
+            assert(meshes.contains(meshIndex) && "Invalid mesh");
+            assert(instanceCount > 0 && "Instance count must be greater than 0");
+
+            meshes[meshIndex].instanceCount = instanceCount;
         }
 
     protected:
@@ -235,25 +243,21 @@ namespace fly {
             
         
             VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-            colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            colorBlendAttachment.blendEnable = VK_FALSE;
-            colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-            colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-            colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD; // Optional
-            colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-            colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-            colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
-        
+            colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+            colorBlendAttachment.blendEnable = VK_TRUE,
+            colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD,
+            colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+                    
             VkPipelineColorBlendStateCreateInfo colorBlending{};
             colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
             colorBlending.logicOpEnable = VK_FALSE;
             colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
             colorBlending.attachmentCount = 1;
             colorBlending.pAttachments = &colorBlendAttachment;
-            colorBlending.blendConstants[0] = 0.0f; // Optional
-            colorBlending.blendConstants[1] = 0.0f; // Optional
-            colorBlending.blendConstants[2] = 0.0f; // Optional
-            colorBlending.blendConstants[3] = 0.0f; // Optional
         
         
             std::vector<VkDynamicState> dynamicStates = {
