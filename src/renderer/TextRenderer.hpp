@@ -8,8 +8,8 @@
 #include <memory>
 #include <unordered_map>
 
-static const char* const FRAG_TEXT_SHADER_SRC = "shaders/textfrag.spv";
-static const char* const VERT_TEXT_SHADER_SRC = "shaders/textvert.spv";
+static const char* const FRAG_TEXT_SHADER_SRC = "Engine/shaders/textfrag.spv";
+static const char* const VERT_TEXT_SHADER_SRC = "Engine/shaders/textvert.spv";
 
 namespace fly {
 

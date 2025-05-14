@@ -16,8 +16,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-static const char* const FRAG2D_SHADER_SRC = "shaders/frag2d.spv";
-static const char* const VERT2D_SHADER_SRC = "shaders/vert2d.spv";
+static const char* const FRAG2D_SHADER_SRC = "Engine/shaders/frag2d.spv";
+static const char* const VERT2D_SHADER_SRC = "Engine/shaders/vert2d.spv";
 
 namespace fly {
 

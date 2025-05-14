@@ -5,8 +5,6 @@ include(FetchContent)
 project(EngineLibrary)
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_BUILD_TYPE Debug)
 
 find_package(Vulkan REQUIRED)
 
@@ -28,7 +26,7 @@ add_library(imgui
     ${imgui_external_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
 	${imgui_external_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
-target_link_libraries(imgui PRIVATE glfw Vulkan::Vulkan)
+target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
 target_include_directories(imgui PUBLIC ${imgui_external_SOURCE_DIR})
 	
 include_directories(include)
@@ -38,11 +36,7 @@ target_link_libraries(engine PUBLIC glfw ${GLFW_LIBRARIES} Vulkan::Vulkan glm im
 target_include_directories(engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(MSVC)
-	target_compile_options(engine PRIVATE /W4 /WX)
+	target_compile_options(engine PUBLIC /W4 /WX)
 else()
-	target_compile_options(engine PRIVATE -Wall -Wextra -Wpedantic -Werror)
+	target_compile_options(engine PUBLIC -Wall -Wextra -Wpedantic -Werror)
 endif()
-
-# Test executable
-add_executable(EngineTest test/test.cpp)
-target_link_libraries(EngineTest engine)
