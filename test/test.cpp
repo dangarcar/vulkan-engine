@@ -1,9 +1,12 @@
+#include "Utils.hpp"
 #include "renderer/DefaultPipeline.hpp"
 #include <Engine.hpp>
+#include <cmath>
 #include <cstdint>
 #include <iostream>
 #include <imgui.h>
 #include <memory>
+#include <random>
 #include <vector>
 
 #define GLM_FORCE_RADIANS
@@ -27,6 +30,14 @@ public:
     ~Game() = default;
     
     void init(fly::Engine& engine) override {
+        std::mt19937_64 rng(std::random_device{}());
+        std::normal_distribution norm(78.0, 5.0);
+        for(int i=0; i<50; ++i) {
+            for(int j=0; j<200; ++j)
+                this->str += (char) std::lround(norm(rng));
+            this->str += '\n';
+        }
+
         engine.getTextRenderer().loadFont( //FIXME:
             "DS_DIGITAL", 
             std::filesystem::path("test/res/font.png"), 
@@ -105,6 +116,16 @@ public:
             this->defaultPipeline->detachModel(this->planeIdx, currentFrame);
         }
 
+        if(window.isKeyPressed(GLFW_KEY_D)) {
+            fly::ScopeTimer t("TEXT CPU RENDERING");
+
+            engine.getTextRenderer().renderText(
+                "DS_DIGITAL", 
+                str, 
+                {0, 0}, fly::Align::LEFT, 14.0, {1, 1, 1, 1}
+            );
+        }
+
         totalTime += dt;
         fly::DefaultUBO ubo{};
         ubo.model = glm::rotate(glm::mat4(1.0f), (float)totalTime * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -135,13 +156,13 @@ public:
         engine.getTextRenderer().renderText(
             "DS_DIGITAL", 
             "HELLO_WORLD!\nME GUSTA EL ARROZ", 
-            {600, 0}, fly::Align::CENTER, 40.0, {1, 1, 1, 1}
+            {600, 0}, fly::Align::CENTER, 14.0, {1, 1, 1, 1}
         );
 
         engine.getTextRenderer().renderText(
             "DS_DIGITAL", 
             "BYE!", 
-            {0, 0}, fly::Align::LEFT, 300.0, {1, 1, 1, 1}
+            {600, 300}, fly::Align::LEFT, 300.0, {1, 1, 1, 1}
         );
     }
     
@@ -161,6 +182,7 @@ private:
     float gamma = 1.0f;
     glm::vec4 myColor;
     double totalTime = 0;
+    std::string str;
 
 };
 

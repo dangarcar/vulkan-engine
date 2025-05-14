@@ -38,10 +38,7 @@ namespace fly {
             if(v.size() > MAX_CHARS)
                 throw std::runtime_error("There cannot be that number of characters of the same font!");
             
-            for(size_t i=0; i<v.size(); ++i) {
-                memcpy(this->fonts[k].buffersMapped[currentFrame], &v[0], v.size()*sizeof(GPUCharacter));
-            }
-
+            memcpy(this->fonts[k].buffersMapped[currentFrame], &v[0], v.size()*sizeof(GPUCharacter));
             this->pipeline->setInstanceCount(this->fonts[k].meshIndex, v.size());
         }
 
@@ -73,6 +70,7 @@ namespace fly {
 
         float advance = 0;
         int line = 0;
+        this->fontRenderQueue[fontName].reserve(this->fontRenderQueue[fontName].size() + str.size());
         for(auto c: str) {
             if(c == '\n') {
                 line++;
@@ -152,7 +150,7 @@ namespace fly {
             engine.getVulkanInstance(), engine.getCommandPool(), fontImg, 
             fly::STB_Format::STBI_rgb_alpha, VK_FORMAT_R8G8B8A8_SRGB
         );
-        font.sampler = std::make_unique<fly::TextureSampler>(engine.getVulkanInstance(), font.texture->getMipLevels());
+        font.sampler = std::make_unique<fly::TextureSampler>(engine.getVulkanInstance(), 0); //No mipmapping in the texture atlases
         
         //MODEL LOADING
         auto vertices = this->vertices;

@@ -44,8 +44,10 @@ namespace fly {
                 keys.push_back(e.first);
 
             for(auto k: keys) {
-                ModelDetachInfo info;
-                info.data = std::move( this->meshes.extract(k).mapped() );
+                ModelDetachInfo info {
+                    .data = std::move( this->meshes.extract(k).mapped() ),
+                    .currentFrame = 0
+                };
                 this->pendingDetach.push(std::move(info));
             }
 
