@@ -44,6 +44,7 @@ namespace fly {
         bool mouseClicked(MouseButton btn) const { return oldBtnPress[static_cast<int>(btn)] == false && btnPress[static_cast<int>(btn)] == true; }
         bool mouseReleased(MouseButton btn) const { return oldBtnPress[static_cast<int>(btn)] == true && btnPress[static_cast<int>(btn)] == false; }
 
+        float getScroll() const { return scroll - oldScroll; }
 
     private:
         GLFWwindow* window;
@@ -51,15 +52,17 @@ namespace fly {
         int width, height;
 
         static constexpr int NUM_KEYS = 1024;
-        std::bitset<NUM_KEYS> oldKeyStates, keyStates;
+        std::bitset<NUM_KEYS> oldKeyStates = false, keyStates = false;
 
         glm::vec2 oldMousePos, mousePos;
+        float oldScroll = 0, scroll = 0;
 
-        std::bitset<3> btnPress, oldBtnPress;
+        std::bitset<3> btnPress = false, oldBtnPress = false;
 
         static void framebufferResizeCallback(GLFWwindow* glfwWindow, int width, int height);
         static void keyCallback(GLFWwindow* glfwWindow, int key, int scancode, int action, int mods);
         static void mouseButtonCallback(GLFWwindow* glfwWindow, int button, int action, int mods);
+        static void scrollCallback(GLFWwindow* glfwWindow, double xoffset, double yoffset);
     };
 
     

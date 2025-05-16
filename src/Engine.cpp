@@ -71,6 +71,7 @@ namespace fly {
             }
 
             imguiRenderer->setupFrame();
+            ImGui::Begin("Debug");
 
             this->scene->run(
                 std::chrono::duration<double, std::chrono::seconds::period>(lastTime - time).count(), 
@@ -80,6 +81,7 @@ namespace fly {
 
             this->renderer->render(this->currentFrame);
             this->textRenderer->render(this->currentFrame);
+            ImGui::End();
             ImGui::Render();
             drawFrame();
         }

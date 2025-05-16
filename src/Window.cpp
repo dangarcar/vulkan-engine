@@ -20,6 +20,7 @@ namespace fly {
 
         glfwSetFramebufferSizeCallback(this->window, framebufferResizeCallback);
         glfwSetKeyCallback(this->window, keyCallback);
+        glfwSetScrollCallback(window, scrollCallback);
     }
 
     Window::~Window() {
@@ -53,6 +54,7 @@ namespace fly {
     void Window::handleInput() {
         this->oldKeyStates = std::move(this->keyStates);        
         this->oldBtnPress = std::move(this->btnPress);
+        this->oldScroll = scroll;
 
         glfwPollEvents();
 
@@ -112,6 +114,14 @@ namespace fly {
         break;
         }
     }
+
+    void Window::scrollCallback(GLFWwindow* glfwWindow, double xoffset, double yoffset) {
+        (void) xoffset;
+
+        auto window = reinterpret_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
+        window->scroll += yoffset;
+    }
+
 
     std::vector<const char*> Window::getRequiredExtensions() {
         uint32_t glfwExtensionCount = 0;
