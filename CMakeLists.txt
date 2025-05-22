@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 include(FetchContent)
 
-project(EngineLibrary)
+project(FlyEngineLibrary)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -31,12 +31,12 @@ target_include_directories(imgui PUBLIC ${imgui_external_SOURCE_DIR})
 	
 include_directories(include)
 file(GLOB_RECURSE sources src/*.cpp)
-add_library(engine STATIC ${sources})
-target_link_libraries(engine PUBLIC glfw ${GLFW_LIBRARIES} Vulkan::Vulkan glm imgui)
-target_include_directories(engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_library(fly_engine STATIC ${sources})
+target_link_libraries(fly_engine PUBLIC glfw ${GLFW_LIBRARIES} Vulkan::Vulkan glm imgui)
+target_include_directories(fly_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(MSVC)
-	target_compile_options(engine PUBLIC /W4 /WX)
+	target_compile_options(fly_engine PUBLIC /W4 /WX)
 else()
-	target_compile_options(engine PUBLIC -Wall -Wextra -Wpedantic -Werror)
+	target_compile_options(fly_engine PUBLIC -Wall -Wextra -Wpedantic -Werror)
 endif()
