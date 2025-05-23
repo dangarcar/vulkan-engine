@@ -11,8 +11,8 @@
 
 #include <glm/glm.hpp>
 
-static const char* const SKYBOX_FRAG_SHADER_SRC = "Engine/shaders/skyboxfrag.spv";
-static const char* const SKYBOX_VERT_SHADER_SRC = "Engine/shaders/skyboxvert.spv";
+static const char* const SKYBOX_FRAG_SHADER_SRC = "vulkan-engine/shaders/skyboxfrag.spv";
+static const char* const SKYBOX_VERT_SHADER_SRC = "vulkan-engine/shaders/skyboxvert.spv";
 
 namespace fly {
 

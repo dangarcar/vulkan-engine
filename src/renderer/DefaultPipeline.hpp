@@ -10,8 +10,8 @@
 
 #include <glm/glm.hpp>
 
-static const char* const DEFAULT_FRAG_SHADER_SRC = "Engine/shaders/frag.spv";
-static const char* const DEFAULT_VERT_SHADER_SRC = "Engine/shaders/vert.spv";
+static const char* const DEFAULT_FRAG_SHADER_SRC = "vulkan-engine/shaders/frag.spv";
+static const char* const DEFAULT_VERT_SHADER_SRC = "vulkan-engine/shaders/vert.spv";
 
 namespace fly {
     
