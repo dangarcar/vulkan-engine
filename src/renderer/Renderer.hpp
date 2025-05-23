@@ -8,13 +8,11 @@
 #include "Texture.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
 #include "renderer/vulkan/VulkanTypes.h"
-#include <cstdint>
+
+#include <memory>
 #include <unordered_map>
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 static const char* const FRAG2D_SHADER_SRC = "Engine/shaders/frag2d.spv";
 static const char* const VERT2D_SHADER_SRC = "Engine/shaders/vert2d.spv";
@@ -42,9 +40,9 @@ namespace fly {
     using Vertex2DArray = TVertexArray<Vertex2D>;
     class GPipeline2D;
 
-    class Renderer {
+    class Renderer2d {
     public:
-        Renderer(Engine& engine);
+        Renderer2d(Engine& engine);
     
         void resize(int width, int height);
 
@@ -55,14 +53,39 @@ namespace fly {
             glm::vec2 size, 
             bool centre = false,
             glm::vec4 modColor = {1,1,1,1}
-        );
+        ) {
+            _renderTexture(texture, textureSampler, origin, size, centre, modColor, true);
+        }
+
+        void renderQuad(
+            glm::vec2 origin, 
+            glm::vec2 size, 
+            glm::vec4 color,
+            bool centre = false
+        ) {
+            _renderTexture(*this->nullTexture, *this->nullTextureSampler, origin, size, centre, color, false);
+        }
 
     private:
         void render(uint32_t currentFrame);
         friend class Engine;
 
+        void _renderTexture(
+            const Texture& texture, 
+            const TextureSampler& textureSampler, 
+            glm::vec2 origin, 
+            glm::vec2 size, 
+            bool centre,
+            glm::vec4 modColor,
+            bool useTexture
+        );
+
     private:
         GPipeline2D* pipeline2d;
+        
+        //For everyone to use
+        std::unique_ptr<Texture> nullTexture;
+        std::unique_ptr<TextureSampler> nullTextureSampler;
 
         struct TextureRender {
             const Texture& texture; 

@@ -30,6 +30,7 @@ namespace fly {
 
     class Texture {
     public:
+        //Texture creator for generic purposes, like depth textures 
         Texture(
             const VulkanInstance& vk, 
             uint32_t width, uint32_t height, 
@@ -38,8 +39,12 @@ namespace fly {
             VkImageUsageFlags usage,
             VkImageAspectFlags aspectFlags
         );
+        //Texture obtained from the path given
         Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format);
-    
+        //Default 2x2 magenta and black texture ready to be sampled
+        Texture(const VulkanInstance& vk, const VkCommandPool commandPool);
+        
+
         ~Texture();
     
         uint32_t getMipLevels() const { return mipLevels; }
@@ -58,12 +63,17 @@ namespace fly {
     
         const VulkanInstance& vk;
 
+    private:
+        void _createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format);   
+        
     };
 
 
     class TextureSampler {
     public:
-        TextureSampler(const VulkanInstance& vk, uint32_t mipLevels);
+        enum class Filter { LINEAR, NEAREST };
+
+        TextureSampler(const VulkanInstance& vk, uint32_t mipLevels, Filter filter = Filter::LINEAR);
         ~TextureSampler();
 
         VkSampler getSampler() const { return textureSampler; }

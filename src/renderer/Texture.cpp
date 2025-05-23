@@ -1,4 +1,5 @@
 #include "Texture.hpp"
+#include <cstdint>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
@@ -22,6 +23,7 @@ namespace std {
 
 namespace fly {
 
+    //TEXTURE
     Texture::Texture(
         const VulkanInstance& vk, 
         uint32_t width, uint32_t height, 
@@ -42,10 +44,11 @@ namespace fly {
             usage, 
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
             this->image, 
-            this->imageMemory
+            this->imageMemory,
+            false
         );
         
-        this->imageView = createImageView(this->vk, this->image, format, aspectFlags, 1);
+        this->imageView = createImageView(this->vk, this->image, format, aspectFlags, 1, false);
     }
 
     Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format):
@@ -53,13 +56,29 @@ namespace fly {
     {
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load(path.string().c_str(), &texWidth, &texHeight, &texChannels, static_cast<int>(stbFormat));
-        VkDeviceSize imageSize = texWidth * texHeight * 4;
-    
+        VkDeviceSize imageSize;
+        if(stbFormat == STB_Format::STBI_rgb_alpha)
+            imageSize = texHeight * texWidth * 4;
+        else
+            imageSize = texHeight * texWidth * texChannels;
+
         if (!pixels) {
             throw std::runtime_error("failed to load texture image!");
         }
-    
-        this->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+
+        _createTextureFromPixels(vk, commandPool, texWidth, texHeight, pixels, imageSize, format);
+
+        stbi_image_free(pixels);
+    }
+
+    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool): vk{vk} {
+        uint32_t pixels[4] = { 0xFFFF00FFu, 0xFF000000u, 0xFF000000u, 0xFFFF00FFu };
+        _createTextureFromPixels(vk, commandPool, 2, 2, pixels, sizeof(pixels), VK_FORMAT_R8G8B8A8_SRGB);
+    }
+
+
+    void Texture::_createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format) {        
+        this->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
     
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -78,12 +97,10 @@ namespace fly {
         memcpy(data, pixels, static_cast<size_t>(imageSize));
         vkUnmapMemory(vk.device, stagingBufferMemory);
     
-        stbi_image_free(pixels);
-    
         createImage(
             vk,    
-            texWidth, 
-            texHeight, 
+            width, 
+            height, 
             this->mipLevels,
             VK_SAMPLE_COUNT_1_BIT,
             format, 
@@ -91,7 +108,8 @@ namespace fly {
             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
             this->image, 
-            this->imageMemory
+            this->imageMemory,
+            false
         );
     
         transitionImageLayout(
@@ -106,22 +124,22 @@ namespace fly {
             vk, commandPool,    
             stagingBuffer, 
             this->image, 
-            static_cast<uint32_t>(texWidth), 
-            static_cast<uint32_t>(texHeight)
+            static_cast<uint32_t>(width), 
+            static_cast<uint32_t>(height)
         );
     
         generateMipmaps(
             vk, commandPool,    
             this->image, 
             format, 
-            texWidth, texHeight, 
+            width, height, 
             this->mipLevels
         );
         
         vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
         vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
 
-        this->imageView = createImageView(vk, this->image, format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels);
+        this->imageView = createImageView(vk, this->image, format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, false);
     }
 
     Texture::~Texture() {
@@ -131,12 +149,20 @@ namespace fly {
     }
 
 
-    TextureSampler::TextureSampler(const VulkanInstance& vk, uint32_t mipLevels): vk{vk} {
+
+    //TEXTURE SAMPLER
+    TextureSampler::TextureSampler(const VulkanInstance& vk, uint32_t mipLevels, Filter filter): vk{vk} {
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
 
+        if(filter == Filter::LINEAR) {
+            samplerInfo.magFilter = VK_FILTER_LINEAR;
+            samplerInfo.minFilter = VK_FILTER_LINEAR;
+        } else if(filter == Filter::NEAREST) {
+            samplerInfo.magFilter = VK_FILTER_NEAREST;
+            samplerInfo.minFilter = VK_FILTER_NEAREST;
+        }
+            
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;

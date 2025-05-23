@@ -51,7 +51,7 @@ namespace fly {
         
         imguiRenderer = std::make_unique<ImGuiRenderer>(this->window.getGlfwWindow(), this->vk);
 
-        this->renderer = std::make_unique<Renderer>(*this);
+        this->renderer2d = std::make_unique<Renderer2d>(*this);
         this->textRenderer = std::make_unique<TextRenderer>(*this);
     }
 
@@ -63,7 +63,7 @@ namespace fly {
 
             window.handleInput();
             if(window.isFramebufferResized()) {
-                this->renderer->resize(window.getWidth(), window.getHeight());
+                this->renderer2d->resize(window.getWidth(), window.getHeight());
                 this->textRenderer->resize(window.getWidth(), window.getHeight());
             }
             for(auto& [p, pipeline]: this->graphicPipelines) {
@@ -79,7 +79,7 @@ namespace fly {
                 *this
             );
 
-            this->renderer->render(this->currentFrame);
+            this->renderer2d->render(this->currentFrame);
             this->textRenderer->render(this->currentFrame);
             ImGui::End();
             ImGui::Render();
@@ -92,7 +92,7 @@ namespace fly {
 
         this->scene.reset();
         this->textRenderer.reset();
-        this->renderer.reset();
+        this->renderer2d.reset();
         this->imguiRenderer.reset();
         cleanup();
     }
@@ -506,7 +506,7 @@ namespace fly {
         vk.swapChainImageViews.resize(vk.swapChainImages.size());
         
         for (size_t i = 0; i < vk.swapChainImages.size(); i++) {
-            vk.swapChainImageViews[i] = createImageView(this->vk, vk.swapChainImages[i], vk.swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+            vk.swapChainImageViews[i] = createImageView(this->vk, vk.swapChainImages[i], vk.swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1, false);
         }
     }
 

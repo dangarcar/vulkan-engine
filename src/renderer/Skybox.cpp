@@ -1,104 +1,16 @@
-#include "Renderer.hpp"
+#include "Skybox.hpp"
 
-#include "../Engine.hpp"
-#include "TUniformBuffer.hpp"
 #include "Texture.hpp"
-
-#include <glm/gtc/matrix_transform.hpp>
-#include <memory>
-
 
 namespace fly {
 
-
-    // RENDERER IMPLEMENTATION
-    Renderer2d::Renderer2d(Engine& engine): vk{engine.getVulkanInstance()}, commandPool{engine.getCommandPool()} {
-        this->pipeline2d = engine.addPipeline<GPipeline2D>(1000);
-        this->orthoProj = glm::ortho(0.0f, (float)vk.swapChainExtent.width, 0.0f, (float)vk.swapChainExtent.height);
-    
-        this->nullTexture = std::make_unique<Texture>(engine.getVulkanInstance(), engine.getCommandPool());
-
-        this->nullTextureSampler = std::make_unique<TextureSampler>(engine.getVulkanInstance(), 1, TextureSampler::Filter::NEAREST);
-    }
-
-    void Renderer2d::_renderTexture(
-        const Texture& texture, 
-        const TextureSampler& textureSampler, 
-        glm::vec2 origin, 
-        glm::vec2 size, 
-        bool centre,
-        glm::vec4 modColor,
-        bool useTexture
-    ) {
-        if(centre)
-            origin -= size / 2.0f;
-
-        auto transform = glm::mat4(1.0f);
-        transform = glm::translate(transform, glm::vec3(origin, 0));
-        transform = glm::scale(transform, glm::vec3(size, 1));
-        
-        UBO2D ubo;
-        ubo.proj = this->orthoProj * transform;
-        ubo.modColor = modColor;
-        ubo.useTexture = useTexture;
-
-        this->textureRenderQueue[texture.toRef()].push_back(
-            {texture, textureSampler, ubo}
-        );
-    }
-
-    void Renderer2d::resize(int width, int height) {
-        this->orthoProj = glm::ortho(0.0f, (float)width, 0.0f, (float)height);
-    }
-
-    void Renderer2d::render(uint32_t currentFrame) {
-        for(auto& [k, v]: this->textureRenderQueue) {
-            if(this->textureData[k].size() > v.size()) {
-                while(this->textureData[k].size() != v.size()) {   
-                    auto& data = this->textureData[k].back();
-                    this->pipeline2d->detachModel(data.meshIdx, currentFrame);
-                    this->textureData[k].pop_back();
-                }
-            } 
-            else if(textureData[k].size() < v.size()) {
-                while(this->textureData[k].size() != v.size()) {
-                    TextureData data;
-                    data.uniformBuffer = std::make_unique<TUniformBuffer<UBO2D>>(this->vk);
-
-                    auto vertices = this->vertices;
-                    auto indices = this->indices;
-                    data.meshIdx = this->pipeline2d->attachModel(std::make_unique<Vertex2DArray>(
-                        this->vk, commandPool, std::move(vertices), std::move(indices)
-                    ));
-                
-                    this->pipeline2d->updateDescriptorSet(
-                        data.meshIdx, 
-                        *data.uniformBuffer, 
-                        v[0].texture, 
-                        v[0].textureSampler
-                    );
-                
-                    this->textureData[k].emplace_back(std::move(data));
-                }
-            }
-
-            for(size_t i=0; i<v.size(); ++i) {
-                this->textureData[k][i].uniformBuffer->updateUBO(this->textureRenderQueue[k][i].ubo, currentFrame);
-            }
-        }
-
-        this->textureRenderQueue.clear();
-    }
-
-    //2D PIPELINE IMPLEMENTATION
-    void GPipeline2D::updateDescriptorSet(
-        unsigned meshIndex,
-
-        const TUniformBuffer<UBO2D>& uniformBuffer,
+    /*//2D PIPELINE IMPLEMENTATION
+    void SkyboxPipeline::updateDescriptorSet(
+        const TUniformBuffer<UBOSkybox>& uniformBuffer,
         const Texture& texture,
         const TextureSampler& textureSampler
     ) {
-        assert(this->meshes[meshIndex].descriptorSets.size() == MAX_FRAMES_IN_FLIGHT && "Descriptor set vector bad size!");
+        assert(this->meshes[0].descriptorSets.size() == MAX_FRAMES_IN_FLIGHT && "Descriptor set vector bad size!");
 
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
             VkDescriptorBufferInfo bufferInfo{};
@@ -114,7 +26,7 @@ namespace fly {
             std::vector<VkWriteDescriptorSet> descriptorWrites(2);
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = this->meshes[meshIndex].descriptorSets[i];
+            descriptorWrites[0].dstSet = this->meshes[0].descriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
             descriptorWrites[0].dstArrayElement = 0;
             descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -122,7 +34,7 @@ namespace fly {
             descriptorWrites[0].pBufferInfo = &bufferInfo;
 
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = this->meshes[meshIndex].descriptorSets[i];
+            descriptorWrites[1].dstSet = this->meshes[0].descriptorSets[i];
             descriptorWrites[1].dstBinding = 1;
             descriptorWrites[1].dstArrayElement = 0;
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -133,7 +45,7 @@ namespace fly {
         }
     }
 
-    VkDescriptorSetLayout GPipeline2D::createDescriptorSetLayout() {
+    VkDescriptorSetLayout SkyboxPipeline::createDescriptorSetLayout() {
         VkDescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -162,7 +74,7 @@ namespace fly {
         return descriptorSetLayout;
     }
 
-    VkDescriptorPool GPipeline2D::createDescriptorPool() {
+    VkDescriptorPool SkyboxPipeline::createDescriptorPool() {
         std::array<VkDescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -184,29 +96,27 @@ namespace fly {
     }
 
 
-
     //VERTEX IMPLEMENTATION
-    VkVertexInputBindingDescription Vertex2D::getBindingDescription() {
+    VkVertexInputBindingDescription SimpleVertex::getBindingDescription() {
         VkVertexInputBindingDescription bindingDescription{};
         bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Vertex2D);
+        bindingDescription.stride = sizeof(SimpleVertex);
         bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
         return bindingDescription;
     }
     
-    std::vector<VkVertexInputAttributeDescription> Vertex2D::getAttributeDescriptions() {
+    std::vector<VkVertexInputAttributeDescription> SimpleVertex::getAttributeDescriptions() {
         std::vector<VkVertexInputAttributeDescription> attributeDescriptions(1);
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex2D, pos);
+        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[0].offset = offsetof(SimpleVertex, pos);
 
         return attributeDescriptions;
     }
 
-    bool Vertex2D::operator==(const Vertex2D& other) const {
+    bool SimpleVertex::operator==(const SimpleVertex& other) const {
         return pos == other.pos;
-    }
-
+    }*/
 }

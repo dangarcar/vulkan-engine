@@ -100,7 +100,8 @@ namespace fly {
         VkImage image, 
         VkFormat format, 
         VkImageAspectFlags aspectFlags, 
-        uint32_t mipLevels
+        uint32_t mipLevels,
+        bool cubemap
     );
 
     void createImage(
@@ -114,7 +115,8 @@ namespace fly {
         VkImageUsageFlags usage, 
         VkMemoryPropertyFlags properties, 
         VkImage& image, 
-        VkDeviceMemory& imageMemory
+        VkDeviceMemory& imageMemory,
+        bool cubemap
     );
 
 

@@ -18,9 +18,6 @@ layout(location = 2) out float gamma;
 void main() {
     gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
 
-    /*gl_Position.x += -2 + (gl_InstanceIndex%40) * 0.1;
-    gl_Position.y += -1 + (gl_InstanceIndex/40) * 0.1;*/
-
     fragColor = inColor;
     fragTexCoord = inTexCoord;
     gamma = ubo.gamma;

@@ -28,7 +28,7 @@ add_subdirectory(Engine)
 add_subdirectory(Game)
 ```
 
-5. Create folder `build` and run this commands:`
+5. Create folder `build` and run this commands:
 ```
 cd build
 cmake ..

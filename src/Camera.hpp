@@ -21,7 +21,7 @@ namespace fly {
     private:
         glm::mat4 proj, view;
         glm::vec3 pos, lookDir;
-        float fov, speed = 1.0f, mouseSpeed = 500.0f, scrollSpeed = 1.0f;
+        float fov, speed = 1.0f, mouseSpeed = 500.0f, scrollSpeed = 600.0f;
         bool used = false;
 
     };

@@ -54,7 +54,7 @@ namespace fly {
         const Window& getWindow() const { return this->window; }
         const VulkanInstance& getVulkanInstance() const { return this->vk; } 
         VkCommandPool getCommandPool() const { return this->commandPool; }
-        Renderer& getRenderer() { return *this->renderer; }
+        Renderer2d& getRenderer2d() { return *this->renderer2d; }
         TextRenderer& getTextRenderer() { return *this->textRenderer; }
 
     private:
@@ -65,7 +65,7 @@ namespace fly {
 
         Window window;
         std::unique_ptr<ImGuiRenderer> imguiRenderer;
-        std::unique_ptr<Renderer> renderer;
+        std::unique_ptr<Renderer2d> renderer2d;
         std::unique_ptr<TextRenderer> textRenderer;
 
         uint32_t currentFrame = 0;

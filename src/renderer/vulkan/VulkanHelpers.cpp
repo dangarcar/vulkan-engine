@@ -532,7 +532,8 @@ namespace fly {
         VkImage image, 
         VkFormat format, 
         VkImageAspectFlags aspectFlags, 
-        uint32_t mipLevels
+        uint32_t mipLevels,
+        bool cubemap
     ) {
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -543,7 +544,10 @@ namespace fly {
         viewInfo.subresourceRange.baseMipLevel = 0;
         viewInfo.subresourceRange.levelCount = mipLevels;
         viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
+        if(cubemap)
+            viewInfo.subresourceRange.layerCount = 6;
+        else
+            viewInfo.subresourceRange.layerCount = 1;
     
         VkImageView imageView;
         if (vkCreateImageView(vk.device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
@@ -565,7 +569,8 @@ namespace fly {
         VkImageUsageFlags usage, 
         VkMemoryPropertyFlags properties, 
         VkImage& image, 
-        VkDeviceMemory& imageMemory
+        VkDeviceMemory& imageMemory,
+        bool cubemap
     ) {
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -581,6 +586,8 @@ namespace fly {
         imageInfo.usage = usage;
         imageInfo.samples = numSamples;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if(cubemap)
+            imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     
         if (vkCreateImage(vk.device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
             throw std::runtime_error("failed to create image!");
