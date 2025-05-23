@@ -79,8 +79,8 @@ namespace fly {
                 *this
             );
 
-            this->renderer2d->render(this->currentFrame);
             this->textRenderer->render(this->currentFrame);
+            this->renderer2d->render(this->currentFrame);
             ImGui::End();
             ImGui::Render();
             drawFrame();
