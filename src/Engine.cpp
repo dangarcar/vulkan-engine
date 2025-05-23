@@ -74,7 +74,7 @@ namespace fly {
             ImGui::Begin("Debug");
 
             this->scene->run(
-                std::chrono::duration<double, std::chrono::seconds::period>(lastTime - time).count(), 
+                std::chrono::duration<double, std::chrono::seconds::period>(time - lastTime).count(), 
                 this->currentFrame,
                 *this
             );

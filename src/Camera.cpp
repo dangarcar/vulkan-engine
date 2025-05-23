@@ -41,25 +41,25 @@ namespace fly {
         auto right = glm::cross(UP, this->lookDir);
         glm::vec3 dpos = {0, 0, 0};
         if(window.isKeyPressed(GLFW_KEY_W)) 
-            dpos -= glm::normalize(glm::vec3(lookDir.x, lookDir.y, 0));
-        else if(window.isKeyPressed(GLFW_KEY_S)) 
             dpos += glm::normalize(glm::vec3(lookDir.x, lookDir.y, 0));
+        else if(window.isKeyPressed(GLFW_KEY_S)) 
+            dpos -= glm::normalize(glm::vec3(lookDir.x, lookDir.y, 0));
         if(window.isKeyPressed(GLFW_KEY_A)) 
-            dpos -= glm::normalize(right);
-        else if(window.isKeyPressed(GLFW_KEY_D)) 
             dpos += glm::normalize(right);
+        else if(window.isKeyPressed(GLFW_KEY_D)) 
+            dpos -= glm::normalize(right);
         if(window.isKeyPressed(GLFW_KEY_SPACE)) 
-            dpos.z -= 1;
-        else if(window.isKeyPressed(GLFW_KEY_LEFT_SHIFT)) 
             dpos.z += 1;
+        else if(window.isKeyPressed(GLFW_KEY_LEFT_SHIFT)) 
+            dpos.z -= 1;
 
         if(dpos.x != 0 || dpos.y != 0 || dpos.z != 0)
             this->pos += glm::normalize(dpos) * speed * dt;
         
-        this->pos -= lookDir * window.getScroll() * scrollSpeed * dt;
+        this->pos += lookDir * window.getScroll() * scrollSpeed * dt;
 
         if(used) {
-            auto dmouse = window.getMouseDelta() * mouseSpeed * dt * glm::pi<float>();
+            auto dmouse = -window.getMouseDelta() * mouseSpeed * dt * glm::pi<float>();
             auto rotate = glm::mat4(1.0f);
             rotate = glm::rotate(rotate, dmouse.x / window.getWidth(), glm::normalize(glm::cross(lookDir, right)));
             rotate = glm::rotate(rotate, dmouse.y / window.getHeight(), glm::normalize(glm::cross(lookDir, UP)));
