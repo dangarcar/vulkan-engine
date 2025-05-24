@@ -124,7 +124,7 @@ namespace fly {
 
         void setInstanceCount(unsigned meshIndex, int instanceCount) {
             assert(meshes.contains(meshIndex) && "Invalid mesh");
-            assert(instanceCount > 0 && "Instance count must be greater than 0");
+            assert(instanceCount >= 0 && "Instance count must be greater than 0");
 
             meshes[meshIndex].instanceCount = instanceCount;
         }

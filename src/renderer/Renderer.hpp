@@ -9,6 +9,7 @@
 #include "glm/ext/matrix_float4x4.hpp"
 #include "renderer/vulkan/VulkanTypes.h"
 
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 
@@ -80,13 +81,6 @@ namespace fly {
             bool useTexture
         );
 
-    private:
-        GPipeline2D* pipeline2d;
-        
-        //For everyone to use
-        std::unique_ptr<Texture> nullTexture;
-        std::unique_ptr<TextureSampler> nullTextureSampler;
-
         struct TextureRender {
             const Texture& texture; 
             const TextureSampler& textureSampler; 
@@ -96,9 +90,20 @@ namespace fly {
             unsigned meshIdx;
             std::unique_ptr<TUniformBuffer<UBO2D>> uniformBuffer;
         };
+        void destroyTextureData(TextureData&& data, uint32_t currentFrame);
+
+
+    private:
+        GPipeline2D* pipeline2d;
+        
+        //For everyone to use
+        std::unique_ptr<Texture> nullTexture;
+        std::unique_ptr<TextureSampler> nullTextureSampler;
+
         std::unordered_map<TextureRef, std::vector<TextureData>> textureData;
 
-        std::unordered_map<TextureRef, std::vector<TextureRender>> textureRenderQueue;
+        std::unordered_map<TextureRef, std::vector<TextureRender>> textureRenderQueue, oldTextureRenders;
+        std::vector<std::pair<uint32_t, std::unique_ptr<TUniformBuffer<UBO2D>>>> ubosToDestroy;
 
         const VulkanInstance& vk;
         const VkCommandPool commandPool;

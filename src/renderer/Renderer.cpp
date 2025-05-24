@@ -52,11 +52,23 @@ namespace fly {
     }
 
     void Renderer2d::render(uint32_t currentFrame) {
+        //DESTROY OLD UBOS WHEN THEY'RE NOT USED ANYMORE
+        std::vector<std::pair<uint32_t, std::unique_ptr<TUniformBuffer<UBO2D>>>> newUbosToDestroy;
+        for(auto& p: this->ubosToDestroy) {
+            if(currentFrame != p.first) {
+                newUbosToDestroy.push_back(std::move(p));
+                continue;
+            }
+
+            p.second.reset(); //Remove ubo
+        }
+        this->ubosToDestroy = std::move(newUbosToDestroy);        
+        
+        //MATCH THE TEXTURE DATA TO RENDER WITH THE ONE THAT THE PIPELINE HOLDS
         for(auto& [k, v]: this->textureRenderQueue) {
-            if(this->textureData[k].size() > v.size()) {
+            if(this->textureData[k].size() > v.size()) { //Clean up instances of a texture
                 while(this->textureData[k].size() != v.size()) {   
-                    auto& data = this->textureData[k].back();
-                    this->pipeline2d->detachModel(data.meshIdx, currentFrame);
+                    destroyTextureData(std::move(this->textureData[k].back()), currentFrame);
                     this->textureData[k].pop_back();
                 }
             } 
@@ -87,8 +99,25 @@ namespace fly {
             }
         }
 
+        //CLEAN UP ALL TEXTURES
+        for(auto& [k, v]: this->oldTextureRenders) {
+            if(!this->textureRenderQueue.contains(k)) {
+                for(auto& data: this->textureData[k]) {
+                    destroyTextureData(std::move(data), currentFrame);
+                }
+                this->textureData.erase(k);
+            }
+        }
+
+        this->oldTextureRenders = this->textureRenderQueue;
         this->textureRenderQueue.clear();
     }
+
+    void Renderer2d::destroyTextureData(TextureData&& data, uint32_t currentFrame) {
+        this->pipeline2d->detachModel(data.meshIdx, currentFrame);
+        this->ubosToDestroy.emplace_back(std::make_pair(currentFrame, std::move(data.uniformBuffer)));
+    }
+
 
     //2D PIPELINE IMPLEMENTATION
     void GPipeline2D::updateDescriptorSet(

@@ -74,6 +74,7 @@ namespace fly {
         Engine& engine;
         std::unordered_map<std::string, Font> fonts;
         std::unordered_map<std::string, std::vector<GPUCharacter>> fontRenderQueue;
+        std::unordered_map<std::string, int> oldFontInstances; 
 
         TextPipeline* pipeline;
         glm::mat4 orthoProj;

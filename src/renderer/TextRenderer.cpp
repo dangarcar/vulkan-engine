@@ -34,10 +34,18 @@ namespace fly {
     }
 
     void TextRenderer::render(uint32_t currentFrame) {
+        for(auto& [k, e]: this->oldFontInstances) {
+            if(!this->fontRenderQueue.contains(k))
+                this->pipeline->setInstanceCount(this->fonts[k].meshIndex, 0);
+        }
+        this->oldFontInstances.clear();
+
         for(auto& [k, v]: this->fontRenderQueue) {
             if(v.size() > MAX_CHARS)
                 throw std::runtime_error("There cannot be that number of characters of the same font!");
             
+            this->oldFontInstances.insert({k, v.size()});
+
             memcpy(this->fonts[k].buffersMapped[currentFrame], &v[0], v.size()*sizeof(GPUCharacter));
             this->pipeline->setInstanceCount(this->fonts[k].meshIndex, v.size());
         }
