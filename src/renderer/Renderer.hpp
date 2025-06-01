@@ -123,7 +123,7 @@ namespace fly {
 
     class GPipeline2D: public TGraphicsPipeline<Vertex2D> {
     public:
-        GPipeline2D(const VulkanInstance& vk): TGraphicsPipeline{vk} {}
+        GPipeline2D(const VulkanInstance& vk): TGraphicsPipeline{vk, false} {}
         ~GPipeline2D() = default;
     
         void updateDescriptorSet(

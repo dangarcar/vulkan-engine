@@ -1,5 +1,7 @@
 #include "Texture.hpp"
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
@@ -31,7 +33,7 @@ namespace fly {
         VkSampleCountFlagBits numSamples,
         VkImageUsageFlags usage,
         VkImageAspectFlags aspectFlags
-    ): mipLevels{1}, vk{vk} 
+    ): mipLevels{1}, vk{vk}, cubemap{false}
     {
         createImage(
             this->vk,
@@ -52,7 +54,7 @@ namespace fly {
     }
 
     Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format):
-        vk{vk}
+        vk{vk}, cubemap{false}
     {
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load(path.string().c_str(), &texWidth, &texHeight, &texChannels, static_cast<int>(stbFormat));
@@ -71,11 +73,44 @@ namespace fly {
         stbi_image_free(pixels);
     }
 
-    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool): vk{vk} {
+    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool): vk{vk}, cubemap{false} {
         uint32_t pixels[4] = { 0xFFFF00FFu, 0xFF000000u, 0xFF000000u, 0xFFFF00FFu };
         _createTextureFromPixels(vk, commandPool, 2, 2, pixels, sizeof(pixels), VK_FORMAT_R8G8B8A8_SRGB);
     }
 
+    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::array<std::filesystem::path, 6> path, STB_Format stbFormat, VkFormat format):
+        vk{vk}, cubemap{true}
+    {
+        int texWidth, texHeight, texChannels;
+        std::vector<stbi_uc*> pixelArray;
+        for(auto& p: path) {
+            pixelArray.push_back(stbi_load(p.string().c_str(), &texWidth, &texHeight, &texChannels, static_cast<int>(stbFormat)));
+            if(!pixelArray.back())
+                throw std::runtime_error("failed to load texture image in cubemap!");
+        }
+        VkDeviceSize imageSize;
+        if(stbFormat == STB_Format::STBI_rgb_alpha)
+            imageSize = texHeight * texWidth * 4 * 6;
+        else
+            imageSize = texHeight * texWidth * texChannels * 6;
+        auto layerSize = imageSize / 6;        
+
+        //Unsafe C-like code that is fine in this situation because of its short livespan
+        {
+            void* pixels = malloc(imageSize);
+            for(int i=0; i<6; ++i) {
+                memcpy((uint8_t*)pixels + layerSize*i, pixelArray[i], layerSize);
+            }
+
+            _createTextureFromPixels(vk, commandPool, texWidth, texHeight, pixels, imageSize, format);
+
+            free(pixels);
+        }
+
+        for(auto p: pixelArray) {
+            stbi_image_free(p);
+        }
+    }
 
     void Texture::_createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format) {        
         this->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
@@ -109,7 +144,7 @@ namespace fly {
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
             this->image, 
             this->imageMemory,
-            false
+            this->cubemap
         );
     
         transitionImageLayout(
@@ -117,7 +152,8 @@ namespace fly {
             this->image, 
             VK_IMAGE_LAYOUT_UNDEFINED, 
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            this->mipLevels
+            this->mipLevels,
+            this->cubemap
         );
         
         copyBufferToImage(
@@ -125,7 +161,8 @@ namespace fly {
             stagingBuffer, 
             this->image, 
             static_cast<uint32_t>(width), 
-            static_cast<uint32_t>(height)
+            static_cast<uint32_t>(height),
+            this->cubemap
         );
     
         generateMipmaps(
@@ -133,13 +170,14 @@ namespace fly {
             this->image, 
             format, 
             width, height, 
-            this->mipLevels
+            this->mipLevels,
+            this->cubemap
         );
         
         vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
         vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
 
-        this->imageView = createImageView(vk, this->image, format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, false);
+        this->imageView = createImageView(vk, this->image, format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
     }
 
     Texture::~Texture() {

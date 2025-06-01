@@ -72,7 +72,8 @@ namespace fly {
         VkFormat imageFormat, 
         int32_t texWidth, 
         int32_t texHeight, 
-        uint32_t mipLevels
+        uint32_t mipLevels,
+        bool cubemap
     );
 
     void transitionImageLayout(
@@ -82,7 +83,8 @@ namespace fly {
         VkImage image, 
         VkImageLayout oldLayout, 
         VkImageLayout newLayout, 
-        uint32_t mipLevels
+        uint32_t mipLevels,
+        bool cubemap
     );
 
     void copyBufferToImage(
@@ -92,7 +94,8 @@ namespace fly {
         VkBuffer buffer, 
         VkImage image, 
         uint32_t width, 
-        uint32_t height
+        uint32_t height,
+        bool cubemap
     );
 
     VkImageView createImageView(

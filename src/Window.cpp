@@ -18,9 +18,10 @@ namespace fly {
         this->window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
         glfwSetWindowUserPointer(this->window, this);
 
-        glfwSetFramebufferSizeCallback(this->window, framebufferResizeCallback);
-        glfwSetKeyCallback(this->window, keyCallback);
-        glfwSetScrollCallback(window, scrollCallback);
+        glfwSetFramebufferSizeCallback(this->window, this->framebufferResizeCallback);
+        glfwSetKeyCallback(this->window, this->keyCallback);
+        glfwSetScrollCallback(this->window, this->scrollCallback);
+        glfwSetMouseButtonCallback(this->window, this->mouseButtonCallback);
     }
 
     Window::~Window() {

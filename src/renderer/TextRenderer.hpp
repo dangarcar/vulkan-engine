@@ -93,7 +93,7 @@ namespace fly {
 
     class TextPipeline: public TGraphicsPipeline<Vertex2D> {
     public:
-        TextPipeline(const VulkanInstance& vk): TGraphicsPipeline{vk} {}
+        TextPipeline(const VulkanInstance& vk): TGraphicsPipeline{vk, false} {}
         ~TextPipeline() = default;
 
         void updateDescriptorSet(

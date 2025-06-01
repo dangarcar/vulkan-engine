@@ -36,7 +36,7 @@ namespace fly {
     template<typename Vertex_t>
     class TGraphicsPipeline : public IGraphicsPipeline {
     public:
-        TGraphicsPipeline(const VulkanInstance& vk): vk{vk} {}
+        TGraphicsPipeline(const VulkanInstance& vk, bool depthTest): depthTestEnabled(depthTest), vk{vk} {}
         virtual ~TGraphicsPipeline() {
             std::vector<unsigned> keys;
             keys.reserve(this->meshes.size());
@@ -68,7 +68,7 @@ namespace fly {
             
             auto [pipeline, layout] = createGraphicsPipeline(
                 this->vk, this->getVertShaderCode(), this->getFragShaderCode(), 
-                renderPass, this->descriptorSetLayout, msaaSamples
+                renderPass, this->descriptorSetLayout, msaaSamples, this->depthTestEnabled
             );
             this->graphicsPipeline = pipeline;
             this->pipelineLayout = layout;
@@ -130,6 +130,7 @@ namespace fly {
         }
 
     protected:
+        bool depthTestEnabled;
         struct MeshData {
             std::unique_ptr<TVertexArray<Vertex_t>> vertexArray;
             VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
@@ -164,7 +165,8 @@ namespace fly {
 
             VkRenderPass renderPass,
             VkDescriptorSetLayout descriptorSetLayout,
-            VkSampleCountFlagBits msaaSamples
+            VkSampleCountFlagBits msaaSamples,
+            bool depthTestEnabled
         ) {
             VkShaderModule vertShaderModule = createShaderModule(vk.device, vertShaderCode);
             VkShaderModule fragShaderModule = createShaderModule(vk.device, fragShaderCode);
@@ -233,15 +235,19 @@ namespace fly {
         
             VkPipelineDepthStencilStateCreateInfo depthStencil{};
             depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-            depthStencil.depthTestEnable = VK_TRUE;
-            depthStencil.depthWriteEnable = VK_TRUE;
-            depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-            depthStencil.depthBoundsTestEnable = VK_FALSE;
-            depthStencil.minDepthBounds = 0.0f; // Optional
-            depthStencil.maxDepthBounds = 1.0f; // Optional
-            depthStencil.stencilTestEnable = VK_FALSE;
-            depthStencil.front = {}; // Optional
-            depthStencil.back = {}; // Optional
+            if(!depthTestEnabled)
+                depthStencil.depthTestEnable = VK_FALSE;
+            else {
+                depthStencil.depthTestEnable = VK_TRUE;
+                depthStencil.depthWriteEnable = VK_TRUE;
+                depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+                depthStencil.depthBoundsTestEnable = VK_FALSE;
+                depthStencil.minDepthBounds = 0.0f; // Optional
+                depthStencil.maxDepthBounds = 1.0f; // Optional
+                depthStencil.stencilTestEnable = VK_FALSE;
+                depthStencil.front = {}; // Optional
+                depthStencil.back = {}; // Optional
+            }
             
         
             VkPipelineColorBlendAttachmentState colorBlendAttachment{};

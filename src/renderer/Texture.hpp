@@ -3,6 +3,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 #include <filesystem>
+#include <array>
 
 #include "vulkan/VulkanTypes.h"
 
@@ -41,6 +42,8 @@ namespace fly {
         );
         //Texture obtained from the path given
         Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format);
+        //Cubemap from path
+        Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::array<std::filesystem::path, 6> path, STB_Format stbFormat, VkFormat format);
         //Default 2x2 magenta and black texture ready to be sampled
         Texture(const VulkanInstance& vk, const VkCommandPool commandPool);
         
@@ -50,6 +53,7 @@ namespace fly {
         uint32_t getMipLevels() const { return mipLevels; }
         VkImage getImage() const { return image; }
         VkImageView getImageView() const { return imageView; }
+        bool isCubemap() const { return cubemap; }
 
         const TextureRef toRef() const {
             return { mipLevels, image, imageMemory, imageView };
@@ -60,9 +64,10 @@ namespace fly {
         VkImage image;
         VkDeviceMemory imageMemory;
         VkImageView imageView;
-    
+        
         const VulkanInstance& vk;
-
+        bool cubemap = false;
+        
     private:
         void _createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format);   
         

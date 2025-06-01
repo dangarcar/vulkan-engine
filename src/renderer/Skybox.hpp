@@ -4,6 +4,7 @@
 
 #include "TVertexArray.hpp"
 #include "TUniformBuffer.hpp"
+#include "Texture.hpp"
 #include "renderer/TGraphicsPipeline.hpp"
 
 #include <cstdint>
@@ -16,9 +17,9 @@ static const char* const SKYBOX_VERT_SHADER_SRC = "vulkan-engine/shaders/skyboxv
 
 namespace fly {
 
-    /*struct UBOSkybox {
+    struct UBOSkybox {
 	    glm::mat4 projection;
-	    glm::mat4 model;
+	    glm::mat4 view;
     };
 
     struct SimpleVertex {
@@ -33,13 +34,22 @@ namespace fly {
 
     using SimpleVertexArray = TVertexArray<SimpleVertex>;
     class SkyboxPipeline;
+    class Engine;
 
     class Skybox {
+    public:
+        Skybox(Engine& engine, std::unique_ptr<Texture> cubemap, std::unique_ptr<TextureSampler> cubemapSampler);
+        ~Skybox() = default;
+    
+        void render(uint32_t currentFrame, glm::mat4 projection, glm::mat4 view);
+
 
     private:
         SkyboxPipeline* pipeline;
 
         std::unique_ptr<TUniformBuffer<UBOSkybox>> uniformBuffer;
+        std::unique_ptr<TextureSampler> cubemapSampler;
+        std::unique_ptr<Texture> cubemap;
 
         const std::vector<SimpleVertex> vertices = {
             {{-1.0f,  1.0f, -1.0f}},
@@ -86,7 +96,23 @@ namespace fly {
         };
 
         const std::vector<uint32_t> indices = {
-            0, 1, 2, 1, 2, 3
+            0, 1, 2,    // Cara trasera
+            3, 4, 5,
+
+            6, 7, 8,    // Cara izquierda
+            9, 10,11,
+
+            12,13,14,   // Cara derecha
+            15,16,17,
+
+            18,19,20,   // Cara frontal
+            21,22,23,
+
+            24,25,26,   // Cara superior
+            27,28,29,
+
+            30,31,32,   // Cara inferior
+            33,34,35
         };
     };
 
@@ -95,7 +121,7 @@ namespace fly {
 
     class SkyboxPipeline : public TGraphicsPipeline<SimpleVertex> {
     public:
-        SkyboxPipeline(const VulkanInstance& vk): TGraphicsPipeline{vk} {}
+        SkyboxPipeline(const VulkanInstance& vk): TGraphicsPipeline{vk, false} {}
         ~SkyboxPipeline() = default;
 
         void updateDescriptorSet(
@@ -116,6 +142,6 @@ namespace fly {
         VkDescriptorSetLayout createDescriptorSetLayout() override;
         VkDescriptorPool createDescriptorPool() override;
 
-    };*/
+    };
 
 }

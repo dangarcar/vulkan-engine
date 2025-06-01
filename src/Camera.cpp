@@ -29,9 +29,8 @@ namespace fly {
         ImGui::SliderFloat("Mouse speed", &this->mouseSpeed, 0, 1000);
         ImGui::SliderFloat("Scroll speed", &this->scrollSpeed, 0, 1000);
 
-        if(window.keyJustPressed(GLFW_KEY_M)) { //FIXME:
-            used = !used;
-        }
+        if(window.keyJustPressed(GLFW_KEY_ESCAPE)) used = false; //FIXME:
+        if(window.mouseClicked(MouseButton::LEFT)) used = true; //FIXME:
 
         if(used)
             glfwSetInputMode(window.getGlfwWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);

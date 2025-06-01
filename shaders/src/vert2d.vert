@@ -14,7 +14,6 @@ layout(location = 2) out int useTexture;
 
 void main() {
     gl_Position = ubo.proj * vec4(inPosition, 0, 1);
-    gl_Position.z += 0.01;
 
     fragTexCoord = inPosition;
     modColor = ubo.modColor;

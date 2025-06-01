@@ -1,10 +1,36 @@
 #include "Skybox.hpp"
 
+#include "TUniformBuffer.hpp"
 #include "Texture.hpp"
+#include "../Engine.hpp"
+#include <memory>
 
 namespace fly {
 
-    /*//2D PIPELINE IMPLEMENTATION
+    //SKYBOX IMPLEMENTATION
+    Skybox::Skybox(Engine& engine, std::unique_ptr<Texture> cubemap, std::unique_ptr<TextureSampler> cubemapSampler): cubemapSampler(std::move(cubemapSampler)),cubemap(std::move(cubemap)) {
+        assert(this->cubemap->isCubemap());
+
+        this->pipeline = engine.addPipeline<SkyboxPipeline>(-1000); //Render in the background
+
+        this->uniformBuffer = std::make_unique<TUniformBuffer<UBOSkybox>>(engine.getVulkanInstance());
+
+        auto vertices = this->vertices;
+        auto indices = this->indices;
+        this->pipeline->attachModel(std::make_unique<SimpleVertexArray>(engine.getVulkanInstance(), engine.getCommandPool(), std::move(vertices), std::move(indices)));
+        this->pipeline->updateDescriptorSet(*this->uniformBuffer, *this->cubemap, *this->cubemapSampler);
+    }
+
+    void Skybox::render(uint32_t currentFrame, glm::mat4 projection, glm::mat4 view) {
+        UBOSkybox ubo;
+        ubo.projection = projection;
+        ubo.view = view;
+
+        this->uniformBuffer->updateUBO(ubo, currentFrame);
+    }
+
+
+    //2D PIPELINE IMPLEMENTATION
     void SkyboxPipeline::updateDescriptorSet(
         const TUniformBuffer<UBOSkybox>& uniformBuffer,
         const Texture& texture,
@@ -118,5 +144,5 @@ namespace fly {
 
     bool SimpleVertex::operator==(const SimpleVertex& other) const {
         return pos == other.pos;
-    }*/
+    }
 }
