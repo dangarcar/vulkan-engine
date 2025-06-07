@@ -49,7 +49,9 @@ In the end you should have this project folder structure:
 |- CMakeLists.txt
 ```
 
+
 ## How to prepare image for the textures
+
 
 For this engine it is recommended to create 2d textures or cubemaps with this fly::Texture constructor:
 ``` cpp
@@ -57,7 +59,7 @@ fly::Texture(const fly::VulkanInstance& vk, const VkCommandPool commandPool, std
 ```
 
 This constructor is valid for 2d and cubemaps, but they need to be in ktx2 format with bc7 compression and with the mipmaps included in the image.
-To create files like that, you need to use the (KTX CLI)[https://github.com/KhronosGroup/KTX-Software/releases] and run the following commands:
+To create files like that, you need to use the [KTX CLI](https://github.com/KhronosGroup/KTX-Software/releases) and run the following commands:
 
 1. Create the ktx2 with uastc (needs transcoding to be sent to the GPU)
 - For 2d images:
