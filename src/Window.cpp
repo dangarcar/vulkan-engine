@@ -4,6 +4,7 @@
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <imgui.h>
 
 #include <stdexcept>
 
@@ -85,6 +86,9 @@ namespace fly {
     }
 
     void Window::mouseButtonCallback(GLFWwindow* glfwWindow, int button, int action, int mods) {
+        if(ImGui::GetIO().WantCaptureMouse)
+            return;
+
         (void) mods;
 
         auto window = reinterpret_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));

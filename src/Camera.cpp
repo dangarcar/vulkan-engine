@@ -1,13 +1,12 @@
 #include "Camera.hpp"
-#include "glm/geometric.hpp"
-
-#include <imgui.h>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <GLFW/glfw3.h>
+
+#include <imgui.h>
 
 #include "Window.hpp"
 
@@ -67,7 +66,7 @@ namespace fly {
 
         this->view = glm::lookAt(this->pos, this->pos + this->lookDir, UP);
         if(window.getHeight() != 0)  {
-            this->proj = glm::perspective(glm::radians(this->fov), window.getWidth() / (float) window.getHeight(), 0.1f, 10.0f);
+            this->proj = glm::perspective(glm::radians(this->fov), window.getWidth() / (float) window.getHeight(), 0.1f, 50.0f);
             this->proj[1][1] *= -1;
         }
     }

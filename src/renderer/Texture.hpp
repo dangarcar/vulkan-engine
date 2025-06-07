@@ -1,11 +1,10 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/hash.hpp>
 #include <filesystem>
-#include <array>
 
 #include "vulkan/VulkanTypes.h"
+
+class ktxTexture2;
 
 namespace fly {
 
@@ -40,10 +39,10 @@ namespace fly {
             VkImageUsageFlags usage,
             VkImageAspectFlags aspectFlags
         );
-        //Texture obtained from the path given
+        //Texture obtained from the path given in png, jpeg or bmp
         Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format);
-        //Cubemap from path
-        Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::array<std::filesystem::path, 6> path, STB_Format stbFormat, VkFormat format);
+        //Ktx texture in bc7 with mipmaps included, they aren't generated
+        Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path ktxPath);
         //Default 2x2 magenta and black texture ready to be sampled
         Texture(const VulkanInstance& vk, const VkCommandPool commandPool);
         
@@ -69,7 +68,8 @@ namespace fly {
         bool cubemap = false;
         
     private:
-        void _createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format);   
+        void _createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format);
+        void _createTextureFromKtx2(const VulkanInstance& vk, const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions);
         
     };
 

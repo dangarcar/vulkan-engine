@@ -1,7 +1,9 @@
 #include "Texture.hpp"
-#include <cstdint>
-#include <cstdlib>
-#include <cstring>
+#include "Utils.hpp"
+#include <algorithm>
+#include <cstddef>
+#include <filesystem>
+#include <stdexcept>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
@@ -10,6 +12,9 @@
 #include <stb/stb_image.h>
 
 #include "vulkan/VulkanHelpers.hpp"
+
+#include <ktx.h>
+#include <ktxvulkan.h>
 
 namespace std {
 
@@ -25,7 +30,7 @@ namespace std {
 
 namespace fly {
 
-    //TEXTURE
+    //TEXTURE IN DEPTH
     Texture::Texture(
         const VulkanInstance& vk, 
         uint32_t width, uint32_t height, 
@@ -53,9 +58,12 @@ namespace fly {
         this->imageView = createImageView(this->vk, this->image, format, aspectFlags, 1, false);
     }
 
+    //PNG OR JPEG WITH MIPMAP GENERATION
     Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format):
         vk{vk}, cubemap{false}
     {
+        ScopeTimer t(std::format("Texture load {}", path.string())); //TODO: remove timer
+
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load(path.string().c_str(), &texWidth, &texHeight, &texChannels, static_cast<int>(stbFormat));
         VkDeviceSize imageSize;
@@ -73,43 +81,74 @@ namespace fly {
         stbi_image_free(pixels);
     }
 
-    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool): vk{vk}, cubemap{false} {
+    //DEFAULT TEXTURE
+    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool): 
+        vk{vk}, cubemap{false} 
+    {
         uint32_t pixels[4] = { 0xFFFF00FFu, 0xFF000000u, 0xFF000000u, 0xFFFF00FFu };
         _createTextureFromPixels(vk, commandPool, 2, 2, pixels, sizeof(pixels), VK_FORMAT_R8G8B8A8_SRGB);
     }
 
-    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::array<std::filesystem::path, 6> path, STB_Format stbFormat, VkFormat format):
-        vk{vk}, cubemap{true}
+    //KTX TEXTURE WITH MIPMAPS INCLUDED IN BC7
+    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path ktxPath):
+        vk{vk}
     {
-        int texWidth, texHeight, texChannels;
-        std::vector<stbi_uc*> pixelArray;
-        for(auto& p: path) {
-            pixelArray.push_back(stbi_load(p.string().c_str(), &texWidth, &texHeight, &texChannels, static_cast<int>(stbFormat)));
-            if(!pixelArray.back())
-                throw std::runtime_error("failed to load texture image in cubemap!");
-        }
-        VkDeviceSize imageSize;
-        if(stbFormat == STB_Format::STBI_rgb_alpha)
-            imageSize = texHeight * texWidth * 4 * 6;
-        else
-            imageSize = texHeight * texWidth * texChannels * 6;
-        auto layerSize = imageSize / 6;        
+        ScopeTimer t("KTX Texture new: ");
 
-        //Unsafe C-like code that is fine in this situation because of its short livespan
-        {
-            void* pixels = malloc(imageSize);
-            for(int i=0; i<6; ++i) {
-                memcpy((uint8_t*)pixels + layerSize*i, pixelArray[i], layerSize);
+        ktxTexture2* texture;
+        auto result = ktxTexture2_CreateFromNamedFile(
+            ktxPath.string().c_str(),
+            KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+            &texture
+        );
+
+        if(result != KTX_SUCCESS)
+           throw std::runtime_error(std::format("Failed to load KTX2 file: {}", ktxErrorString(result)));
+
+        if(ktxTexture2_NeedsTranscoding(texture)) {
+            std::cout << "Needs transcoding\n";
+            ktx_transcode_fmt_e format = KTX_TTF_BC7_RGBA; // or ETC2, ASTC, etc.
+            result = ktxTexture2_TranscodeBasis(texture, format, 0);
+            if(result != KTX_SUCCESS) {
+                ktxTexture_Destroy(reinterpret_cast<ktxTexture*>(texture));
+                throw std::runtime_error(std::format("Transcoding failed: {}", ktxErrorString(result)));
             }
-
-            _createTextureFromPixels(vk, commandPool, texWidth, texHeight, pixels, imageSize, format);
-
-            free(pixels);
         }
 
-        for(auto p: pixelArray) {
-            stbi_image_free(p);
+        this->mipLevels = texture->numLevels;
+        this->cubemap = texture->isCubemap;
+        uint32_t width  = texture->baseWidth;
+        uint32_t height = texture->baseHeight;
+        
+        std::vector<VkBufferImageCopy> regions;
+        for(uint32_t mip = 0; mip < texture->numLevels; ++mip) {
+            uint32_t mipWidth  = std::max(1u, width >> mip);
+            uint32_t mipHeight = std::max(1u, height >> mip);
+        
+            for(uint32_t face = 0; face < texture->numFaces; ++face) {
+                ktx_size_t offset;
+                ktxTexture_GetImageOffset(reinterpret_cast<ktxTexture*>(texture), mip, 0, face, &offset);
+
+                VkBufferImageCopy region{};
+                region.bufferOffset = offset;
+                region.bufferRowLength = 0;
+                region.bufferImageHeight = 0;
+            
+                region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                region.imageSubresource.mipLevel = mip;
+                region.imageSubresource.baseArrayLayer = face;
+                region.imageSubresource.layerCount = 1;
+            
+                region.imageOffset = {0, 0, 0};
+                region.imageExtent = {mipWidth, mipHeight, 1};
+            
+                regions.push_back(region);
+            }
         }
+
+        _createTextureFromKtx2(vk, commandPool, texture, regions);
+
+        ktxTexture_Destroy(reinterpret_cast<ktxTexture*>(texture));
     }
 
     void Texture::_createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format) {        
@@ -180,12 +219,89 @@ namespace fly {
         this->imageView = createImageView(vk, this->image, format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
     }
 
+    void Texture::_createTextureFromKtx2(const VulkanInstance& vk, const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions) {
+        auto width = texture->baseWidth;
+        auto height = texture->baseHeight;
+        auto format = ktxTexture2_GetVkFormat(texture);
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        
+        createBuffer(
+            vk,
+            texture->dataSize, 
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+            stagingBuffer, 
+            stagingBufferMemory
+        );
+    
+        void* data;
+        vkMapMemory(vk.device, stagingBufferMemory, 0, texture->dataSize, 0, &data);
+        memcpy(data, texture->pData, static_cast<size_t>(texture->dataSize));
+        vkUnmapMemory(vk.device, stagingBufferMemory);
+    
+        createImage(
+            vk,    
+            width, 
+            height, 
+            this->mipLevels,
+            VK_SAMPLE_COUNT_1_BIT,
+            format, 
+            VK_IMAGE_TILING_OPTIMAL, 
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+            this->image, 
+            this->imageMemory,
+            this->cubemap
+        );
+    
+        transitionImageLayout(
+            vk, commandPool,
+            this->image, 
+            VK_IMAGE_LAYOUT_UNDEFINED, 
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            this->mipLevels,
+            this->cubemap
+        );
+
+        //COPY BUFFER TO IMAGE
+        {
+            VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
+        
+            vkCmdCopyBufferToImage(
+                commandBuffer,
+                stagingBuffer,
+                image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                regions.size(),
+                regions.data()
+            );
+        
+            endSingleTimeCommands(vk, commandPool, commandBuffer);
+        }
+
+        transitionImageLayout(
+            vk, commandPool,
+            this->image, 
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            this->mipLevels,
+            this->cubemap
+        );
+
+        vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
+        vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
+
+        this->imageView = createImageView(vk, this->image, format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
+    }
+
+
     Texture::~Texture() {
         vkDestroyImageView(vk.device, this->imageView, nullptr);
         vkDestroyImage(vk.device, this->image, nullptr);
         vkFreeMemory(vk.device, this->imageMemory, nullptr);
     }
-
 
 
     //TEXTURE SAMPLER

@@ -10,6 +10,8 @@
 #include "../Engine.hpp"
 #include "vulkan/VulkanConstants.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+
 namespace fly {
 
     TextRenderer::TextRenderer(Engine& engine): engine{engine} {

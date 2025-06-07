@@ -20,7 +20,7 @@ namespace fly {
         VkMemoryPropertyFlags properties
     );
 
-    VkCommandBuffer beginSingleTimeCommands(const VulkanInstance& vk);
+    VkCommandBuffer beginSingleTimeCommands(const VulkanInstance& vk, const VkCommandPool commandPool);
 
     void endSingleTimeCommands(const VulkanInstance& vk, const VkCommandPool commandPool, VkCommandBuffer commandBuffer);
 
