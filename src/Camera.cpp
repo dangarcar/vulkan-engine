@@ -39,17 +39,17 @@ namespace fly {
         auto right = glm::cross(UP, this->lookDir);
         glm::vec3 dpos = {0, 0, 0};
         if(window.isKeyPressed(GLFW_KEY_W)) 
-            dpos += glm::normalize(glm::vec3(lookDir.x, lookDir.y, 0));
+            dpos += glm::normalize(glm::vec3(lookDir.x, 0, lookDir.z));
         else if(window.isKeyPressed(GLFW_KEY_S)) 
-            dpos -= glm::normalize(glm::vec3(lookDir.x, lookDir.y, 0));
+            dpos -= glm::normalize(glm::vec3(lookDir.x, 0, lookDir.z));
         if(window.isKeyPressed(GLFW_KEY_A)) 
             dpos += glm::normalize(right);
         else if(window.isKeyPressed(GLFW_KEY_D)) 
             dpos -= glm::normalize(right);
         if(window.isKeyPressed(GLFW_KEY_SPACE)) 
-            dpos.z += 1;
+            dpos.y += 1;
         else if(window.isKeyPressed(GLFW_KEY_LEFT_SHIFT)) 
-            dpos.z -= 1;
+            dpos.y -= 1;
 
         if(dpos.x != 0 || dpos.y != 0 || dpos.z != 0)
             this->pos += glm::normalize(dpos) * speed * dt;

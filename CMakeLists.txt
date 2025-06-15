@@ -47,6 +47,7 @@ file(GLOB_RECURSE sources *.cpp)
 add_library(fly_engine STATIC ${sources})
 target_link_libraries(fly_engine PUBLIC glfw ${GLFW_LIBRARIES} Vulkan::Vulkan glm imgui ktx)
 target_include_directories(fly_engine PRIVATE ${fetch_ktx_SOURCE_DIR}/include)
+target_include_directories(fly_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(fly_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(MSVC)

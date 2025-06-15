@@ -93,7 +93,7 @@ namespace fly {
     Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path ktxPath):
         vk{vk}
     {
-        ScopeTimer t("KTX Texture new: ");
+        ScopeTimer t(std::format("KTX Texture {}", ktxPath.string()));
 
         ktxTexture2* texture;
         auto result = ktxTexture2_CreateFromNamedFile(
