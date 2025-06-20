@@ -70,14 +70,18 @@ namespace fly {
                 this->vertexBufferMemory
             );
     
-            copyBuffer(
-                vk,
-                commandPool,
-    
-                stagingBuffer, 
-                this->vertexBuffer, 
-                bufferSize
-            );
+            {
+                auto commandBuffer = beginSingleTimeCommands(vk, commandPool);
+                
+                copyBuffer(
+                    commandBuffer,                    
+                    stagingBuffer, 
+                    this->vertexBuffer, 
+                    bufferSize
+                );
+
+                endSingleTimeCommands(vk, commandPool, commandBuffer);
+            }
     
             vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
             vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
@@ -111,14 +115,17 @@ namespace fly {
                 this->indexBufferMemory
             );
     
-            copyBuffer(
-                vk,
-                commandPool,
-    
-                stagingBuffer, 
-                this->indexBuffer, 
-                bufferSize
-            );
+            {
+                auto commandBuffer = beginSingleTimeCommands(vk, commandPool);
+                copyBuffer(
+                    commandBuffer,
+                    
+                    stagingBuffer, 
+                    this->indexBuffer, 
+                    bufferSize
+                );
+                endSingleTimeCommands(vk, commandPool, commandBuffer);
+            }
     
             vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
             vkFreeMemory(vk.device, stagingBufferMemory, nullptr);

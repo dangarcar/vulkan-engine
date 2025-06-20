@@ -8,10 +8,12 @@
 
 #include "Window.hpp"
 #include <algorithm>
+#include <cstdint>
+#include <memory>
 
 
 namespace fly {
- 
+
     class Texture;
     class TextureSampler;
     class ImGuiRenderer;
@@ -85,9 +87,18 @@ namespace fly {
         std::unique_ptr<Texture> depthTexture;
 
         std::vector<VkSemaphore> imageAvailableSemaphores;
-        std::vector<VkSemaphore> renderFinishedSemaphores;
-        std::vector<VkFence> inFlightFences;
+        std::vector<VkSemaphore> renderPassFinishedSemaphores;
+        std::vector<VkSemaphore> computePassFinishedSemaphores;
+        std::vector<VkFence> inFlightFences, inFlightComputeFences;
     
+        VkDescriptorSetLayout computeDescriptorSetLayout = VK_NULL_HANDLE;
+        VkPipelineLayout computePipelineLayout = VK_NULL_HANDLE;
+        VkPipeline computePipeline = VK_NULL_HANDLE;
+        VkDescriptorPool computeDescriptorPool;
+        std::vector<VkDescriptorSet> computeDescriptorSets;
+        std::vector<std::unique_ptr<Texture>> computeInputImages, computeOutputImages;
+        std::vector<VkCommandBuffer> computeCommandBuffers;
+
     private:
         void drawFrame();
         void cleanup();
@@ -106,6 +117,11 @@ namespace fly {
         void createColorAndDepthTextures();
         void createFramebuffers();
         void createSyncObjects();
+
+        void createComputePipeline();
+        void createComputeDescriptorSetLayout();
+        void createComputeResources();
+        void applyGrayscaleFilter(VkCommandBuffer commandBuffer, VkImage inputImage);
 
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
         VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);

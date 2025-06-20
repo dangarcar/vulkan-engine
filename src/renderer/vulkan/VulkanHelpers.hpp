@@ -25,8 +25,7 @@ namespace fly {
     void endSingleTimeCommands(const VulkanInstance& vk, const VkCommandPool commandPool, VkCommandBuffer commandBuffer);
 
     void copyBuffer(
-        const VulkanInstance& vk, const VkCommandPool commandPool, 
-
+        VkCommandBuffer commandBuffer,
         VkBuffer srcBuffer, 
         VkBuffer dstBuffer, 
         VkDeviceSize size
@@ -65,9 +64,8 @@ namespace fly {
 
     //IMAGE
     void generateMipmaps(
-        const VulkanInstance& vk, 
-        const VkCommandPool commandPool,
-
+        const VulkanInstance& vk,
+        VkCommandBuffer commandBuffer,
         VkImage image, 
         VkFormat imageFormat, 
         int32_t texWidth, 
@@ -77,20 +75,20 @@ namespace fly {
     );
 
     void transitionImageLayout(
-        const VulkanInstance& vk,
-        const VkCommandPool commandPool,
-
+        VkCommandBuffer commandBuffer,
         VkImage image, 
         VkImageLayout oldLayout, 
-        VkImageLayout newLayout, 
+        VkImageLayout newLayout,
+        VkPipelineStageFlags srcStageMask,
+        VkPipelineStageFlags dstStageMask,
+        VkAccessFlags srcAccessMask,
+        VkAccessFlags dstAccessMask,
         uint32_t mipLevels,
         bool cubemap
     );
 
     void copyBufferToImage(
-        const VulkanInstance& vk,
-        const VkCommandPool commandPool,
-
+        VkCommandBuffer commandBuffer,
         VkBuffer buffer, 
         VkImage image, 
         uint32_t width, 
@@ -149,7 +147,7 @@ namespace fly {
 
     inline VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
         for (const auto& availableFormat : availableFormats) {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            if (availableFormat.format == VK_FORMAT_R8G8B8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
                 return availableFormat;
             }
         }

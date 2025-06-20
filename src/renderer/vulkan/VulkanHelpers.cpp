@@ -101,19 +101,14 @@ namespace fly {
 
     
     void copyBuffer(
-        const VulkanInstance& vk, const VkCommandPool commandPool, 
-
+        VkCommandBuffer commandBuffer,
         VkBuffer srcBuffer, 
         VkBuffer dstBuffer, 
         VkDeviceSize size
     ) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
-
         VkBufferCopy copyRegion{};
         copyRegion.size = size;
         vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-        endSingleTimeCommands(vk, commandPool, commandBuffer);
     }
 
 
@@ -245,6 +240,8 @@ namespace fly {
         VkPhysicalDeviceFeatures supportedFeatures;
         vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
+        
+
         return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
     }
 
@@ -328,9 +325,8 @@ namespace fly {
 
 
     void generateMipmaps(
-        const VulkanInstance& vk, 
-        const VkCommandPool commandPool,
-
+        const VulkanInstance& vk,
+        VkCommandBuffer commandBuffer,
         VkImage image, 
         VkFormat imageFormat, 
         int32_t texWidth, 
@@ -345,8 +341,6 @@ namespace fly {
         if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
             throw std::runtime_error("texture image format does not support linear blitting!");
         }
-
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
     
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -433,22 +427,21 @@ namespace fly {
             0, nullptr,
             0, nullptr,
             1, &barrier);
-
-        endSingleTimeCommands(vk, commandPool, commandBuffer);
     }
 
 
     void transitionImageLayout(
-        const VulkanInstance& vk,
-        const VkCommandPool commandPool,
-
+        VkCommandBuffer commandBuffer,
         VkImage image, 
         VkImageLayout oldLayout, 
-        VkImageLayout newLayout, 
+        VkImageLayout newLayout,
+        VkPipelineStageFlags srcStageMask,
+        VkPipelineStageFlags dstStageMask,
+        VkAccessFlags srcAccessMask,
+        VkAccessFlags dstAccessMask,
         uint32_t mipLevels,
         bool cubemap
     ) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
    
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -460,58 +453,33 @@ namespace fly {
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = mipLevels;
+        barrier.srcAccessMask = srcAccessMask;
+        barrier.dstAccessMask = dstAccessMask;
         barrier.subresourceRange.baseArrayLayer = 0;
         if(cubemap)
             barrier.subresourceRange.layerCount = 6;
         else
             barrier.subresourceRange.layerCount = 1;
 
-        VkPipelineStageFlags sourceStage;
-        VkPipelineStageFlags destinationStage;
-
-        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-            barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        } 
-        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        } 
-        else {
-            throw std::invalid_argument("unsupported layout transition!");
-        }
-
         vkCmdPipelineBarrier(
             commandBuffer,
-            sourceStage, destinationStage,
+            srcStageMask, dstStageMask,
             0,
             0, nullptr,
             0, nullptr,
             1, &barrier
         );
-
-        endSingleTimeCommands(vk, commandPool, commandBuffer);
     }
 
 
     void copyBufferToImage(
-        const VulkanInstance& vk,
-        const VkCommandPool commandPool,
-
+        VkCommandBuffer commandBuffer,
         VkBuffer buffer, 
         VkImage image, 
         uint32_t width, 
         uint32_t height,
         bool cubemap
-    ) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
-    
+    ) {   
         VkBufferImageCopy region{};
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
@@ -540,8 +508,6 @@ namespace fly {
             1,
             &region
         );
-
-        endSingleTimeCommands(vk, commandPool, commandBuffer);
     }
 
 

@@ -15,6 +15,7 @@ namespace fly {
 
         VkQueue graphicsQueue;
         VkQueue presentQueue;
+        //VkQueue computeQueue;
 
         VkSwapchainKHR swapChain;
         VkFormat swapChainImageFormat;

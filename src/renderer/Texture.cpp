@@ -121,7 +121,7 @@ namespace fly {
         uint32_t height = texture->baseHeight;
         
         std::vector<VkBufferImageCopy> regions;
-        for(uint32_t mip = 0; mip < texture->numLevels; ++mip) {
+        for(uint32_t mip = 0; mip < this->mipLevels; ++mip) {
             uint32_t mipWidth  = std::max(1u, width >> mip);
             uint32_t mipHeight = std::max(1u, height >> mip);
         
@@ -154,9 +154,10 @@ namespace fly {
     void Texture::_createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format) {        
         this->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
     
+        
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-    
+        
         createBuffer(
             vk,
             imageSize, 
@@ -165,12 +166,12 @@ namespace fly {
             stagingBuffer, 
             stagingBufferMemory
         );
-    
+        
         void* data;
         vkMapMemory(vk.device, stagingBufferMemory, 0, imageSize, 0, &data);
         memcpy(data, pixels, static_cast<size_t>(imageSize));
         vkUnmapMemory(vk.device, stagingBufferMemory);
-    
+        
         createImage(
             vk,    
             width, 
@@ -185,33 +186,43 @@ namespace fly {
             this->imageMemory,
             this->cubemap
         );
-    
-        transitionImageLayout(
-            vk, commandPool,
-            this->image, 
-            VK_IMAGE_LAYOUT_UNDEFINED, 
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            this->mipLevels,
-            this->cubemap
-        );
         
-        copyBufferToImage(
-            vk, commandPool,    
-            stagingBuffer, 
-            this->image, 
-            static_cast<uint32_t>(width), 
-            static_cast<uint32_t>(height),
-            this->cubemap
-        );
-    
-        generateMipmaps(
-            vk, commandPool,    
-            this->image, 
-            format, 
-            width, height, 
-            this->mipLevels,
-            this->cubemap
-        );
+        {
+            auto commandBuffer = beginSingleTimeCommands(vk, commandPool);
+            
+            transitionImageLayout(
+                commandBuffer,
+                this->image, 
+                VK_IMAGE_LAYOUT_UNDEFINED, 
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0,
+                VK_ACCESS_TRANSFER_WRITE_BIT,
+                this->mipLevels,
+                this->cubemap
+            );
+            
+            copyBufferToImage(
+                commandBuffer,    
+                stagingBuffer, 
+                this->image, 
+                static_cast<uint32_t>(width), 
+                static_cast<uint32_t>(height),
+                this->cubemap
+            );
+            
+            generateMipmaps(
+                vk, commandBuffer,    
+                this->image, 
+                format, 
+                width, height, 
+                this->mipLevels,
+                this->cubemap
+            );
+
+            endSingleTimeCommands(vk, commandPool, commandBuffer);
+        }
         
         vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
         vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
@@ -256,19 +267,22 @@ namespace fly {
             this->cubemap
         );
     
-        transitionImageLayout(
-            vk, commandPool,
-            this->image, 
-            VK_IMAGE_LAYOUT_UNDEFINED, 
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            this->mipLevels,
-            this->cubemap
-        );
-
-        //COPY BUFFER TO IMAGE
         {
-            VkCommandBuffer commandBuffer = beginSingleTimeCommands(vk, commandPool);
-        
+            auto commandBuffer = beginSingleTimeCommands(vk, commandPool);
+            
+            transitionImageLayout(
+                commandBuffer,
+                this->image, 
+                VK_IMAGE_LAYOUT_UNDEFINED, 
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0,
+                VK_ACCESS_TRANSFER_WRITE_BIT,
+                this->mipLevels,
+                this->cubemap
+            );
+
             vkCmdCopyBufferToImage(
                 commandBuffer,
                 stagingBuffer,
@@ -277,18 +291,22 @@ namespace fly {
                 regions.size(),
                 regions.data()
             );
-        
+
+            transitionImageLayout(
+                commandBuffer,
+                this->image, 
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_ACCESS_SHADER_READ_BIT,
+                this->mipLevels,
+                this->cubemap
+            );
+
             endSingleTimeCommands(vk, commandPool, commandBuffer);
         }
-
-        transitionImageLayout(
-            vk, commandPool,
-            this->image, 
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            this->mipLevels,
-            this->cubemap
-        );
 
         vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
         vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
@@ -317,9 +335,9 @@ namespace fly {
             samplerInfo.minFilter = VK_FILTER_NEAREST;
         }
             
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(vk.physicalDevice, &properties);
