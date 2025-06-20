@@ -56,10 +56,7 @@ namespace fly {
         createComputePipeline();
         createComputeResources();
 
-        imguiRenderer = std::make_unique<ImGuiRenderer>(this->window.getGlfwWindow(), this->vk);
-
-        this->renderer2d = std::make_unique<Renderer2d>(*this);
-        this->textRenderer = std::make_unique<TextRenderer>(*this);
+        uiRenderer = std::make_unique<UIRenderer>(this->window.getGlfwWindow(), this->vk);
     }
 
     void Engine::run() {
@@ -69,15 +66,12 @@ namespace fly {
             time = std::chrono::system_clock::now();
 
             window.handleInput();
-            if(window.isFramebufferResized()) {
-                this->renderer2d->resize(window.getWidth(), window.getHeight());
-                this->textRenderer->resize(window.getWidth(), window.getHeight());
-            }
-            for(auto& [p, pipeline]: this->graphicPipelines) {
+            if(window.isFramebufferResized())
+                uiRenderer->resize(window.getWidth(), window.getHeight()); 
+            for(auto& pipeline: this->graphicPipelines)
                 pipeline->update(this->currentFrame);
-            }
 
-            imguiRenderer->setupFrame();
+            uiRenderer->setupFrame();
             ImGui::Begin("Debug");
 
             this->scene->run(
@@ -86,8 +80,7 @@ namespace fly {
                 *this
             );
 
-            this->textRenderer->render(this->currentFrame);
-            this->renderer2d->render(this->currentFrame);
+            this->uiRenderer->render(this->currentFrame);
             ImGui::End();
             ImGui::Render();
             drawFrame();
@@ -97,10 +90,8 @@ namespace fly {
     Engine::~Engine() {
         vkDeviceWaitIdle(vk.device);
 
-        this->scene.reset();
-        this->textRenderer.reset();
-        this->renderer2d.reset();
-        this->imguiRenderer.reset();
+        scene.reset();
+        uiRenderer.reset();
         cleanup();
     }
 
@@ -127,8 +118,8 @@ namespace fly {
         vkResetCommandBuffer(this->computeCommandBuffers[this->currentFrame], 0);
         applyGrayscaleFilter(this->computeCommandBuffers[this->currentFrame], vk.swapChainImages[imageIndex]);
         
-        vkResetCommandBuffer(this->imguiRenderer->getCommandBuffer(this->currentFrame), 0);
-        imguiRenderer->recordCommandBuffer(imguiRenderer->getCommandBuffer(this->currentFrame), imageIndex);
+        vkResetCommandBuffer(uiRenderer->getCommandBuffer(this->currentFrame), 0);
+        uiRenderer->recordCommandBuffer(imageIndex, this->currentFrame);
         
         
         std::array<VkSubmitInfo, 3> submitInfos = {};
@@ -161,10 +152,10 @@ namespace fly {
         submitInfos[2].pWaitSemaphores = &this->computePassFinishedSemaphores[this->currentFrame];
         submitInfos[2].pWaitDstStageMask = &uiWaitStage; 
         submitInfos[2].commandBufferCount = 1;
-        auto uiBuffer = this->imguiRenderer->getCommandBuffer(this->currentFrame);
+        auto uiBuffer = uiRenderer->getCommandBuffer(this->currentFrame);
         submitInfos[2].pCommandBuffers = &uiBuffer;
         submitInfos[2].signalSemaphoreCount = 1;
-        auto uiSemaphore = this->imguiRenderer->getRenderFinishedSemaphore(this->currentFrame);
+        auto uiSemaphore = uiRenderer->getRenderFinishedSemaphore(this->currentFrame);
         submitInfos[2].pSignalSemaphores = &uiSemaphore;
 
         if(vkQueueSubmit(vk.graphicsQueue, submitInfos.size(), submitInfos.data(), this->inFlightFences[this->currentFrame]) != VK_SUCCESS) {
@@ -175,7 +166,7 @@ namespace fly {
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
         presentInfo.waitSemaphoreCount = 1;
-        auto imguiRenderFinishedSemaphore = imguiRenderer->getRenderFinishedSemaphore(this->currentFrame);
+        auto imguiRenderFinishedSemaphore = uiRenderer->getRenderFinishedSemaphore(this->currentFrame);
         presentInfo.pWaitSemaphores = &imguiRenderFinishedSemaphore;
         
         VkSwapchainKHR swapChains[] = {vk.swapChain};
@@ -197,14 +188,14 @@ namespace fly {
     void Engine::recreateSwapChain() {
         vkDeviceWaitIdle(vk.device);
     
-        imguiRenderer->cleanupSwapchain();
+        uiRenderer->cleanupSwapchain();
         cleanupSwapChain();
 
         createSwapChain();
         createImageViews();
         createColorAndDepthTextures();
         createFramebuffers();
-        imguiRenderer->recreateOnNewSwapChain();
+        uiRenderer->recreateOnNewSwapChain();
     }
 
     void Engine::cleanupSwapChain() {
@@ -265,9 +256,8 @@ namespace fly {
         scissor.extent = vk.swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
         
-        for(auto& [p, pipeline]: this->graphicPipelines) {
+        for(auto& pipeline: this->graphicPipelines)
             pipeline->recordOnCommandBuffer(commandBuffer, this->currentFrame);
-        }
 
         vkCmdEndRenderPass(commandBuffer);
 
@@ -295,7 +285,6 @@ namespace fly {
             vkDestroySemaphore(vk.device, this->computePassFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(vk.device, this->imageAvailableSemaphores[i], nullptr);
             vkDestroyFence(vk.device, this->inFlightFences[i], nullptr);
-            vkDestroyFence(vk.device, this->inFlightComputeFences[i], nullptr);
         }
         
         vkDestroyCommandPool(vk.device, this->commandPool, nullptr);
@@ -656,7 +645,6 @@ namespace fly {
         this->renderPassFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         this->computePassFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         this->inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-        this->inFlightComputeFences.resize(MAX_FRAMES_IN_FLIGHT);
 
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -669,12 +657,14 @@ namespace fly {
             if (vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr, &this->imageAvailableSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr, &this->renderPassFinishedSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr, &this->computePassFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(vk.device, &fenceInfo, nullptr, &this->inFlightFences[i]) != VK_SUCCESS ||
-                vkCreateFence(vk.device, &fenceInfo, nullptr, &this->inFlightComputeFences[i]) != VK_SUCCESS) {
+                vkCreateFence(vk.device, &fenceInfo, nullptr, &this->inFlightFences[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create synchronization objects for a frame!");
             }
         }
     }
+
+
+
 
     void Engine::createComputePipeline() {
         auto computeShaderCode = readFile(COMP_SHADER_SRC);

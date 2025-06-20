@@ -1,25 +1,53 @@
-#include "ImGuiRenderer.hpp"
+#include "UIRenderer.hpp"
 
-#include <cstddef>
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 
-#include "vulkan/VulkanConstants.h"
-#include "vulkan/VulkanHelpers.hpp"
-
-#include <iostream>
+#include <renderer/vulkan/VulkanConstants.h>
+#include <renderer/vulkan/VulkanHelpers.hpp>
 
 namespace fly {
 
-    ImGuiRenderer::ImGuiRenderer(GLFWwindow* window, const VulkanInstance& vk): vk{vk} {
+    UIRenderer::UIRenderer(GLFWwindow* window, const VulkanInstance& vk): vk{vk}, renderer2d(vk), textRenderer(vk) {
         createDescriptorPool();
         createRenderPass();
-        this->imguiCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-        this->imguiCommandBuffers = createCommandBuffers(vk.device, MAX_FRAMES_IN_FLIGHT, this->imguiCommandPool);
+        this->uiCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+        this->uiCommandBuffers = createCommandBuffers(vk.device, MAX_FRAMES_IN_FLIGHT, this->uiCommandPool);
         createFramebuffers();
         createSyncObjects();
 
+        initImgui(window);
+
+        auto pipeline2d = std::make_unique<GPipeline2D>(vk);
+        pipeline2d->allocate(uiRenderPass, VK_SAMPLE_COUNT_1_BIT);
+        this->renderer2d.init(std::move(pipeline2d), this->uiCommandPool);
+
+        auto textPipeline = std::make_unique<TextPipeline>(vk);
+        textPipeline->allocate(uiRenderPass, VK_SAMPLE_COUNT_1_BIT);
+        this->textRenderer.init(std::move(textPipeline));
+    }
+
+    UIRenderer::~UIRenderer() {
+        cleanupSwapchain();
+
+        vkDestroyRenderPass(vk.device, this->uiRenderPass, nullptr);
+
+        vkFreeCommandBuffers(vk.device, this->uiCommandPool, static_cast<uint32_t>(this->uiCommandBuffers.size()), this->uiCommandBuffers.data());
+        vkDestroyCommandPool(vk.device, this->uiCommandPool, nullptr);
+
+        for (int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
+            vkDestroySemaphore(vk.device, this->uiRenderFinishedSemaphores[i], nullptr);
+        }
+
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        
+        vkDestroyDescriptorPool(vk.device, this->uiDescriptorPool, nullptr);
+    }
+
+    void UIRenderer::initImgui(GLFWwindow* window) {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -39,11 +67,11 @@ namespace fly {
         init_info.QueueFamily = findQueueFamilies(vk.surface, vk.physicalDevice).graphicsAndComputeFamily.value();
         init_info.Queue = vk.graphicsQueue;
         init_info.PipelineCache = VK_NULL_HANDLE;
-        init_info.DescriptorPool = this->imguiDescriptorPool;
+        init_info.DescriptorPool = this->uiDescriptorPool;
         init_info.Allocator = nullptr;
         init_info.MinImageCount = MAX_FRAMES_IN_FLIGHT;
         init_info.ImageCount = MAX_FRAMES_IN_FLIGHT;
-        init_info.RenderPass = this->imGuiRenderPass;
+        init_info.RenderPass = this->uiRenderPass;
         init_info.CheckVkResultFn = [](VkResult err) {
             if(err != VK_SUCCESS) 
                 std::cerr << "[vulkan] Error: VkResult = " << err << std::endl;
@@ -51,54 +79,49 @@ namespace fly {
         ImGui_ImplVulkan_Init(&init_info);
     }
 
-    ImGuiRenderer::~ImGuiRenderer() {
-        cleanupSwapchain();    
-
-        vkDestroyRenderPass(vk.device, this->imGuiRenderPass, nullptr);
-
-        vkFreeCommandBuffers(vk.device, this->imguiCommandPool, static_cast<uint32_t>(this->imguiCommandBuffers.size()), this->imguiCommandBuffers.data());
-        vkDestroyCommandPool(vk.device, this->imguiCommandPool, nullptr);
-
-        for (int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            vkDestroySemaphore(vk.device, this->imguiRenderFinishedSemaphores[i], nullptr);
-            vkDestroyFence(vk.device, this->imguiInFlightFences[i], nullptr);
-        }
-
-        ImGui_ImplVulkan_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
-        
-        vkDestroyDescriptorPool(vk.device, this->imguiDescriptorPool, nullptr);
+    void UIRenderer::resize(int width, int height) {
+        renderer2d.resize(width, height);
+        textRenderer.resize(width, height);
     }
 
-    void ImGuiRenderer::setupFrame() {
+    void UIRenderer::render(uint32_t frame) {
+        this->renderer2d.getPipeline()->update(frame);
+        this->renderer2d.render(frame, this->uiCommandPool);
+
+        this->textRenderer.getPipeline()->update(frame);
+        this->textRenderer.render(frame);
+    }
+
+    void UIRenderer::setupFrame() {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
     }
 
-    void ImGuiRenderer::cleanupSwapchain() {
-        for (auto framebuffer : this->imguiFramebuffers) {
+    void UIRenderer::cleanupSwapchain() {
+        for (auto framebuffer : this->uiFramebuffers) {
             vkDestroyFramebuffer(vk.device, framebuffer, nullptr);
         }
     }
 
-    void ImGuiRenderer::recreateOnNewSwapChain() {
+    void UIRenderer::recreateOnNewSwapChain() {
         createFramebuffers();
     }
     
-    void ImGuiRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    void UIRenderer::recordCommandBuffer(uint32_t imageIndex, uint32_t currentFrame) {
+        auto commandBuffer = this->uiCommandBuffers[currentFrame];
+
         VkCommandBufferBeginInfo beginInfo = {};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = 0;
         if(vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to begin recording ImGui command buffer!");
+            throw std::runtime_error("failed to begin recording UI command buffer!");
         }
 
         VkRenderPassBeginInfo renderPassInfo = {};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = this->imGuiRenderPass;
-        renderPassInfo.framebuffer = this->imguiFramebuffers[imageIndex];
+        renderPassInfo.renderPass = this->uiRenderPass;
+        renderPassInfo.framebuffer = this->uiFramebuffers[imageIndex];
         
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = vk.swapChainExtent;
@@ -109,16 +132,32 @@ namespace fly {
         
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(vk.swapChainExtent.width);
+        viewport.height = static_cast<float>(vk.swapChainExtent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = vk.swapChainExtent;
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+        this->renderer2d.getPipeline()->recordOnCommandBuffer(commandBuffer, currentFrame);
+        this->textRenderer.getPipeline()->recordOnCommandBuffer(commandBuffer, currentFrame);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 
         vkCmdEndRenderPass(commandBuffer);
         
         if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to record ImGui command buffer!");
+            throw std::runtime_error("failed to record UI command buffer!");
         }
     }
 
-    void ImGuiRenderer::createDescriptorPool() {
+    void UIRenderer::createDescriptorPool() {
         VkDescriptorPoolSize pool_sizes[] = {
             { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE },
         };
@@ -134,12 +173,12 @@ namespace fly {
         pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
         pool_info.pPoolSizes = pool_sizes;
         
-        if(vkCreateDescriptorPool(vk.device, &pool_info, nullptr, &this->imguiDescriptorPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create ImGui descriptor pool");
+        if(vkCreateDescriptorPool(vk.device, &pool_info, nullptr, &this->uiDescriptorPool) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create UI descriptor pool");
         }
     }
 
-    void ImGuiRenderer::createRenderPass() {
+    void UIRenderer::createRenderPass() {
         VkAttachmentDescription attachment = {};
         attachment.format = vk.swapChainImageFormat;
         attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -180,13 +219,13 @@ namespace fly {
         info.dependencyCount = 1;
         info.pDependencies = &dependency;
         
-        if (vkCreateRenderPass(vk.device, &info, nullptr, &this->imGuiRenderPass) != VK_SUCCESS) {
-            throw std::runtime_error("could not create Dear ImGui's render pass");
+        if (vkCreateRenderPass(vk.device, &info, nullptr, &this->uiRenderPass) != VK_SUCCESS) {
+            throw std::runtime_error("could not create UI render pass");
         }
     }
 
-    void ImGuiRenderer::createFramebuffers() {
-        this->imguiFramebuffers.resize(vk.swapChainImageViews.size());
+    void UIRenderer::createFramebuffers() {
+        this->uiFramebuffers.resize(vk.swapChainImageViews.size());
 
         for(size_t i=0; i<vk.swapChainImageViews.size(); i++) {
             VkImageView attachments[] = {
@@ -195,34 +234,28 @@ namespace fly {
         
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = this->imGuiRenderPass;
+            framebufferInfo.renderPass = this->uiRenderPass;
             framebufferInfo.attachmentCount = 1;
             framebufferInfo.pAttachments = attachments;
             framebufferInfo.width = vk.swapChainExtent.width;
             framebufferInfo.height = vk.swapChainExtent.height;
             framebufferInfo.layers = 1;
         
-            if (vkCreateFramebuffer(vk.device, &framebufferInfo, nullptr, &this->imguiFramebuffers[i]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create framebuffer!");
+            if (vkCreateFramebuffer(vk.device, &framebufferInfo, nullptr, &this->uiFramebuffers[i]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create UI framebuffer!");
             }
         }
     }
 
-    void ImGuiRenderer::createSyncObjects() {
-        this->imguiRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        this->imguiInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+    void UIRenderer::createSyncObjects() {
+        this->uiRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            if (vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr, &this->imguiRenderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(vk.device, &fenceInfo, nullptr, &this->imguiInFlightFences[i]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create ImGui synchronization objects for a frame!");
+            if (vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr, &this->uiRenderFinishedSemaphores[i]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create UI semaphore objects for a frame!");
             }
         }
     }

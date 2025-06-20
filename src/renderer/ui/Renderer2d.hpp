@@ -1,26 +1,20 @@
 #pragma once
 
-#include "../Utils.hpp"
+#include <Utils.hpp>
 
-#include "TGraphicsPipeline.hpp"
-#include "TUniformBuffer.hpp"
-#include "TVertexArray.hpp"
-#include "Texture.hpp"
-#include "glm/ext/matrix_float4x4.hpp"
-#include "renderer/vulkan/VulkanTypes.h"
+#include <renderer/TGraphicsPipeline.hpp>
+#include <renderer/TUniformBuffer.hpp>
+#include <renderer/TVertexArray.hpp>
+#include <renderer/Texture.hpp>
 
-#include <cstdint>
 #include <memory>
 #include <unordered_map>
-
 #include <glm/glm.hpp>
 
 static const char* const FRAG2D_SHADER_SRC = "vulkan-engine/shaders/frag2d.spv";
 static const char* const VERT2D_SHADER_SRC = "vulkan-engine/shaders/vert2d.spv";
 
 namespace fly {
-
-    class Engine;
 
     struct UBO2D {
         alignas(16) glm::mat4 proj;
@@ -43,9 +37,11 @@ namespace fly {
 
     class Renderer2d {
     public:
-        Renderer2d(Engine& engine);
+        Renderer2d(const VulkanInstance& vk);
     
         void resize(int width, int height);
+
+        void init(std::unique_ptr<GPipeline2D> pipeline, VkCommandPool commandPool);
 
         void renderTexture(
             const Texture& texture, 
@@ -66,10 +62,11 @@ namespace fly {
         ) {
             _renderTexture(*this->nullTexture, *this->nullTextureSampler, origin, size, centre, color, false);
         }
+        
+        void render(uint32_t currentFrame, VkCommandPool commandPool);
+        GPipeline2D* getPipeline() { return pipeline2d.get(); }
 
     private:
-        void render(uint32_t currentFrame);
-        friend class Engine;
 
         void _renderTexture(
             const Texture& texture, 
@@ -94,7 +91,7 @@ namespace fly {
 
 
     private:
-        GPipeline2D* pipeline2d;
+        std::unique_ptr<GPipeline2D> pipeline2d;
         
         //For everyone to use
         std::unique_ptr<Texture> nullTexture;
@@ -106,7 +103,6 @@ namespace fly {
         std::vector<std::pair<uint32_t, std::unique_ptr<TUniformBuffer<UBO2D>>>> ubosToDestroy;
 
         const VulkanInstance& vk;
-        const VkCommandPool commandPool;
         glm::mat4 orthoProj;
 
         const std::vector<Vertex2D> vertices = {

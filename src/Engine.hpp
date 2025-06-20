@@ -1,22 +1,12 @@
 #pragma once
 
-#include "renderer/TGraphicsPipeline.hpp"
-#include "renderer/TextRenderer.hpp"
-#include "renderer/vulkan/VulkanTypes.h"
-#include "renderer/ImGuiRenderer.hpp"
-#include "renderer/Renderer.hpp"
-
 #include "Window.hpp"
-#include <algorithm>
-#include <cstdint>
-#include <memory>
-
+#include "renderer/ui/UIRenderer.hpp"
 
 namespace fly {
 
     class Texture;
     class TextureSampler;
-    class ImGuiRenderer;
     class Engine;
     
     class Scene {
@@ -42,13 +32,12 @@ namespace fly {
         }
 
         template<typename T>
-        T* addPipeline(int priority) {
+        T* addPipeline() {
             static_assert(std::is_base_of<IGraphicsPipeline, T>::value);
             auto pip = std::make_unique<T>(this->vk);
             auto ptr = pip.get();
             pip->allocate(this->renderPass, this->msaaSamples);
-            graphicPipelines.emplace_back(std::make_pair(priority, std::move(pip)));
-            std::sort(graphicPipelines.begin(), graphicPipelines.end());
+            graphicPipelines.emplace_back(std::move(pip));
             return ptr;
         }
     
@@ -56,8 +45,7 @@ namespace fly {
         const Window& getWindow() const { return this->window; }
         const VulkanInstance& getVulkanInstance() const { return this->vk; } 
         VkCommandPool getCommandPool() const { return this->commandPool; }
-        Renderer2d& getRenderer2d() { return *this->renderer2d; }
-        TextRenderer& getTextRenderer() { return *this->textRenderer; }
+        UIRenderer& getUIRenderer() { return *this->uiRenderer; }
 
     private:
         std::unique_ptr<Scene> scene;
@@ -66,9 +54,7 @@ namespace fly {
         VkCommandPool commandPool;
 
         Window window;
-        std::unique_ptr<ImGuiRenderer> imguiRenderer;
-        std::unique_ptr<Renderer2d> renderer2d;
-        std::unique_ptr<TextRenderer> textRenderer;
+        std::unique_ptr<UIRenderer> uiRenderer;
 
         uint32_t currentFrame = 0;
         
@@ -79,8 +65,7 @@ namespace fly {
         std::vector<VkFramebuffer> swapChainFramebuffers;
         std::vector<VkCommandBuffer> commandBuffers;
         
-        std::vector<std::pair<int, std::unique_ptr<IGraphicsPipeline>>> graphicPipelines;
-
+        std::vector<std::unique_ptr<IGraphicsPipeline>> graphicPipelines;
 
         VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
         std::unique_ptr<Texture> colorTexture;
@@ -89,7 +74,7 @@ namespace fly {
         std::vector<VkSemaphore> imageAvailableSemaphores;
         std::vector<VkSemaphore> renderPassFinishedSemaphores;
         std::vector<VkSemaphore> computePassFinishedSemaphores;
-        std::vector<VkFence> inFlightFences, inFlightComputeFences;
+        std::vector<VkFence> inFlightFences;
     
         VkDescriptorSetLayout computeDescriptorSetLayout = VK_NULL_HANDLE;
         VkPipelineLayout computePipelineLayout = VK_NULL_HANDLE;

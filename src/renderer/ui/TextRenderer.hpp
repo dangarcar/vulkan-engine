@@ -1,17 +1,16 @@
 #pragma once
 
-#include "Renderer.hpp"
-#include "TGraphicsPipeline.hpp"
-#include "Texture.hpp"
 
-#include <filesystem>
+#include "Renderer2d.hpp" //This is not best practice but it is very convinient
+#include "renderer/vulkan/VulkanTypes.h"
 #include <memory>
-#include <unordered_map>
 
 static const char* const FRAG_TEXT_SHADER_SRC = "vulkan-engine/shaders/textfrag.spv";
 static const char* const VERT_TEXT_SHADER_SRC = "vulkan-engine/shaders/textvert.spv";
 
 namespace fly {
+
+    class Engine;
 
     enum class Align {
         LEFT, RIGHT, CENTER
@@ -50,12 +49,19 @@ namespace fly {
     public:
         static int const MAX_CHARS = 32768;
     public:
-        TextRenderer(Engine& engine);
+        TextRenderer(const VulkanInstance& vk);
         ~TextRenderer();
 
         void resize(int width, int height);
 
-        void loadFont(const std::string& fontName, std::filesystem::path fontImg, std::filesystem::path fontJson);
+        void loadFont(
+            const std::string& fontName, 
+            std::filesystem::path fontImg, 
+            std::filesystem::path fontJson,
+            VkCommandPool commandPool
+        );
+
+        void init(std::unique_ptr<TextPipeline> pipeline);
 
         void renderText(
             const std::string& fontName, 
@@ -66,18 +72,21 @@ namespace fly {
             glm::vec4 color
         );
 
-    private:
+        TextPipeline* getPipeline() { return pipeline.get(); }
         void render(uint32_t currentFrame);
+
+    private:
         friend class Engine;
 
     private:
-        Engine& engine;
         std::unordered_map<std::string, Font> fonts;
         std::unordered_map<std::string, std::vector<GPUCharacter>> fontRenderQueue;
         std::unordered_map<std::string, int> oldFontInstances; 
 
-        TextPipeline* pipeline;
+        std::unique_ptr<TextPipeline> pipeline;
         glm::mat4 orthoProj;
+
+        const VulkanInstance& vk;
 
         const std::vector<Vertex2D> vertices = {
             {{0.0f, 0.0f}},

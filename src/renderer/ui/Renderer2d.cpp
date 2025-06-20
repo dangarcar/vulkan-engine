@@ -1,25 +1,22 @@
-#include "Renderer.hpp"
-
-#include "../Engine.hpp"
-#include "TUniformBuffer.hpp"
-#include "Texture.hpp"
+#include "Renderer2d.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
-#include <memory>
-
 
 namespace fly {
 
 
     // RENDERER IMPLEMENTATION
-    Renderer2d::Renderer2d(Engine& engine): vk{engine.getVulkanInstance()}, commandPool{engine.getCommandPool()} {
-        this->pipeline2d = engine.addPipeline<GPipeline2D>(1000);
+    Renderer2d::Renderer2d(const VulkanInstance& vk): vk{vk} {
         this->orthoProj = glm::ortho(0.0f, (float)vk.swapChainExtent.width, 0.0f, (float)vk.swapChainExtent.height);
-    
-        this->nullTexture = std::make_unique<Texture>(engine.getVulkanInstance(), engine.getCommandPool());
-
-        this->nullTextureSampler = std::make_unique<TextureSampler>(engine.getVulkanInstance(), 1, TextureSampler::Filter::NEAREST);
     }
+
+    void Renderer2d::init(std::unique_ptr<GPipeline2D> pipeline, VkCommandPool commandPool) {
+        this->pipeline2d = std::move(pipeline);
+
+        this->nullTexture = std::make_unique<Texture>(vk, commandPool);
+        this->nullTextureSampler = std::make_unique<TextureSampler>(vk, 1, TextureSampler::Filter::NEAREST);
+    }
+
 
     void Renderer2d::_renderTexture(
         const Texture& texture, 
@@ -51,7 +48,7 @@ namespace fly {
         this->orthoProj = glm::ortho(0.0f, (float)width, 0.0f, (float)height);
     }
 
-    void Renderer2d::render(uint32_t currentFrame) {
+    void Renderer2d::render(uint32_t currentFrame, VkCommandPool commandPool) {
         //DESTROY OLD UBOS WHEN THEY'RE NOT USED ANYMORE
         std::vector<std::pair<uint32_t, std::unique_ptr<TUniformBuffer<UBO2D>>>> newUbosToDestroy;
         for(auto& p: this->ubosToDestroy) {

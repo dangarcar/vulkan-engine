@@ -5,25 +5,20 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
-#include "../Engine.hpp"
-#include "vulkan/VulkanConstants.h"
+#include "renderer/vulkan/VulkanTypes.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace fly {
 
-    TextRenderer::TextRenderer(Engine& engine): engine{engine} {
-        this->pipeline = engine.addPipeline<TextPipeline>(1e9);
-
-        auto& vk = engine.getVulkanInstance();
+    TextRenderer::TextRenderer(const VulkanInstance& vk): vk{vk} {
         this->orthoProj = glm::ortho(0.0f, (float)vk.swapChainExtent.width, 0.0f, (float)vk.swapChainExtent.height);
     }
 
     TextRenderer::~TextRenderer() {
-        auto& vk = engine.getVulkanInstance();
-
         for(auto& [k, f]: fonts) {
             f.sampler.reset();
             f.texture.reset();
@@ -34,6 +29,11 @@ namespace fly {
             }
         }
     }
+
+    void TextRenderer::init(std::unique_ptr<TextPipeline> pipeline) {
+        this->pipeline = std::move(pipeline);
+    }
+    
 
     void TextRenderer::render(uint32_t currentFrame) {
         for(auto& [k, e]: this->oldFontInstances) {
@@ -54,7 +54,6 @@ namespace fly {
 
         this->fontRenderQueue.clear();
     }
-
 
     void TextRenderer::renderText(
         const std::string& fontName, 
@@ -123,7 +122,12 @@ namespace fly {
         this->orthoProj = glm::ortho(0.0f, (float)width, 0.0f, (float)height);
     }
 
-    void TextRenderer::loadFont(const std::string& fontName, std::filesystem::path fontImg, std::filesystem::path fontJson) {
+    void TextRenderer::loadFont(
+        const std::string& fontName, 
+        std::filesystem::path fontImg, 
+        std::filesystem::path fontJson,
+        VkCommandPool commandPool
+    ) {
         //JSON LOADING
         std::unordered_map<char, FontChar> fontChars;
         std::ifstream file(fontJson);
@@ -157,22 +161,22 @@ namespace fly {
         //TEXTURE LOADING
         Font font;
         font.texture = std::make_unique<fly::Texture>(
-            engine.getVulkanInstance(), engine.getCommandPool(), fontImg, 
+            vk, commandPool, fontImg, 
             fly::STB_Format::STBI_rgb_alpha, VK_FORMAT_R8G8B8A8_SRGB
         );
-        font.sampler = std::make_unique<fly::TextureSampler>(engine.getVulkanInstance(), 0); //No mipmapping in the texture atlases
+        font.sampler = std::make_unique<fly::TextureSampler>(vk, 0); //No mipmapping in the texture atlases
         
         //MODEL LOADING
         auto vertices = this->vertices;
         auto indices = this->indices;
         font.meshIndex = this->pipeline->attachModel(std::make_unique<Vertex2DArray>(
-            engine.getVulkanInstance(), engine.getCommandPool(), std::move(vertices), std::move(indices)
+            vk, commandPool, std::move(vertices), std::move(indices)
         ));
 
         VkDeviceSize bufferSize = sizeof(GPUCharacter) * MAX_CHARS;
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
             createBuffer(
-                engine.getVulkanInstance(),
+                vk,
                 bufferSize, 
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
@@ -180,7 +184,7 @@ namespace fly {
                 font.buffersMemory[i]
             );
 
-            vkMapMemory(engine.getVulkanInstance().device, font.buffersMemory[i], 0, bufferSize, 0, &font.buffersMapped[i]);
+            vkMapMemory(vk.device, font.buffersMemory[i], 0, bufferSize, 0, &font.buffersMapped[i]);
         }
 
         this->pipeline->updateDescriptorSet(

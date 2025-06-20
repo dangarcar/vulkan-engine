@@ -1,16 +1,14 @@
 #pragma once
 
-#include "../Utils.hpp"
+#include <Utils.hpp>
+#include <glm/glm.hpp>
+#include <memory>
 
+#include "TGraphicsPipeline.hpp"
 #include "TVertexArray.hpp"
 #include "TUniformBuffer.hpp"
 #include "Texture.hpp"
-#include "renderer/TGraphicsPipeline.hpp"
 
-#include <cstdint>
-#include <memory>
-
-#include <glm/glm.hpp>
 
 static const char* const SKYBOX_FRAG_SHADER_SRC = "vulkan-engine/shaders/skyboxfrag.spv";
 static const char* const SKYBOX_VERT_SHADER_SRC = "vulkan-engine/shaders/skyboxvert.spv";
