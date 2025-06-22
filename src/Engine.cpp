@@ -10,8 +10,6 @@
 #include <memory>
 #include <set>
 
-static const char* COMP_SHADER_SRC = "vulkan-engine/shaders/grayscale.spv";
-
 static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
@@ -52,11 +50,10 @@ namespace fly {
         this->computeCommandBuffers = createCommandBuffers(vk.device, MAX_FRAMES_IN_FLIGHT, this->commandPool);
         createSyncObjects();
 
-        createComputeDescriptorSetLayout();
-        createComputePipeline();
-        createComputeResources();
-
         uiRenderer = std::make_unique<UIRenderer>(this->window.getGlfwWindow(), this->vk);
+
+        this->tonemapFilter = std::make_unique<TonemapFilter>(vk);
+        this->tonemapFilter->allocate();
     }
 
     void Engine::run() {
@@ -68,6 +65,15 @@ namespace fly {
             window.handleInput();
             if(window.isFramebufferResized())
                 uiRenderer->resize(window.getWidth(), window.getHeight()); 
+            
+            while(!this->filterDetachPending.empty()) {
+                FilterDetachInfo& info = this->filterDetachPending.front();
+                if(info.frame != currentFrame) 
+                    break;
+                info.pipeline.reset();
+                this->filterDetachPending.pop();
+            }
+            
             for(auto& pipeline: this->graphicPipelines)
                 pipeline->update(this->currentFrame);
 
@@ -92,10 +98,26 @@ namespace fly {
 
         scene.reset();
         uiRenderer.reset();
+        tonemapFilter.reset();
         cleanup();
     }
 
+    void Engine::removeFilter(uint64_t filterId) {
+        FilterDetachInfo info;
+        info.pipeline = std::move( this->filters.extract(filterId).mapped() );
+        info.frame = this->currentFrame;
 
+        this->filterDetachPending.push(std::move(info));
+    }
+
+    void Engine::removeFilters() {
+        std::vector<uint64_t> keys;
+        for(auto& [k, v]: this->filters) //Idk if this is UB but I'm doing it just in case it is
+            keys.push_back(k);
+
+        for(auto k: keys)
+            removeFilter(k);
+    }
 
     void Engine::drawFrame() {
         vkWaitForFences(vk.device, 1, &this->inFlightFences[this->currentFrame], VK_TRUE, UINT64_MAX);
@@ -116,7 +138,7 @@ namespace fly {
         this->recordCommandBuffer(this->commandBuffers[this->currentFrame], imageIndex);
         
         vkResetCommandBuffer(this->computeCommandBuffers[this->currentFrame], 0);
-        applyGrayscaleFilter(this->computeCommandBuffers[this->currentFrame], vk.swapChainImages[imageIndex]);
+        applyFilters(this->computeCommandBuffers[this->currentFrame], vk.swapChainImages[imageIndex]);
         
         vkResetCommandBuffer(uiRenderer->getCommandBuffer(this->currentFrame), 0);
         uiRenderer->recordCommandBuffer(imageIndex, this->currentFrame);
@@ -196,20 +218,22 @@ namespace fly {
         createColorAndDepthTextures();
         createFramebuffers();
         uiRenderer->recreateOnNewSwapChain();
+
+        tonemapFilter->createResources();
+        for(auto& [id, f]: filters)
+            f->createResources();
     }
 
     void Engine::cleanupSwapChain() {
-        colorTexture.reset();
+        msaaColorTexture.reset();
+        hdrColorTexture.reset();
         depthTexture.reset();
-        
-        computeInputImages.clear();
-        computeOutputImages.clear();
 
-        for (auto framebuffer : this->swapChainFramebuffers) {
+        for(auto framebuffer : this->swapChainFramebuffers) {
             vkDestroyFramebuffer(vk.device, framebuffer, nullptr);
         }
 
-        for (auto imageView : vk.swapChainImageViews) {
+        for(auto imageView : vk.swapChainImageViews) {
             vkDestroyImageView(vk.device, imageView, nullptr);
         }
 
@@ -270,13 +294,7 @@ namespace fly {
         cleanupSwapChain();
 
         graphicPipelines.clear();
-
-        { //TODO: change compute to its own class
-            vkDestroyDescriptorPool(vk.device, this->computeDescriptorPool, nullptr);
-            vkDestroyDescriptorSetLayout(vk.device, this->computeDescriptorSetLayout, nullptr);
-            vkDestroyPipeline(vk.device, this->computePipeline, nullptr);
-            vkDestroyPipelineLayout(vk.device, this->computePipelineLayout, nullptr);
-        }
+        filters.clear();
 
         vkDestroyRenderPass(vk.device, this->renderPass, nullptr);
 
@@ -434,7 +452,7 @@ namespace fly {
 
         vkGetDeviceQueue(vk.device, indices.graphicsAndComputeFamily.value(), 0, &vk.graphicsQueue);
         vkGetDeviceQueue(vk.device, indices.presentFamily.value(), 0, &vk.presentQueue);
-        //vkGetDeviceQueue(vk.device, indices.graphicsAndComputeFamily.value(), 0, &vk.computeQueue);
+        vkGetDeviceQueue(vk.device, indices.graphicsAndComputeFamily.value(), 0, &vk.computeQueue);
     }
 
     void Engine::createSwapChain() {
@@ -516,7 +534,7 @@ namespace fly {
 
     void Engine::createRenderPass() {
         VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = vk.swapChainImageFormat;
+        colorAttachment.format = hdrFormat;
         colorAttachment.samples = this->msaaSamples;
         
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -533,15 +551,14 @@ namespace fly {
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkAttachmentDescription colorAttachmentResolve{};
-        colorAttachmentResolve.format = vk.swapChainImageFormat;
+        colorAttachmentResolve.format = hdrFormat;
         colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
         colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        //colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; //This layout serves for the imgui pass to write over the result image 
+        colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference colorAttachmentResolveRef{};
         colorAttachmentResolveRef.attachment = 2;
@@ -594,15 +611,24 @@ namespace fly {
     }
 
     void Engine::createColorAndDepthTextures() {
-        this->colorTexture = std::make_unique<Texture>(
+        this->msaaColorTexture = std::make_unique<Texture>(
             this->vk, 
             vk.swapChainExtent.width, vk.swapChainExtent.height, 
-            vk.swapChainImageFormat, 
+            this->hdrFormat, 
             this->msaaSamples,
             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT
         );
         
+        this->hdrColorTexture = std::make_unique<Texture>(
+            this->vk, 
+            vk.swapChainExtent.width, vk.swapChainExtent.height, 
+            this->hdrFormat, 
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT
+        );
+
         auto depthFormat = findDepthFormat(vk.physicalDevice);
         this->depthTexture = std::make_unique<Texture>(
             this->vk,
@@ -619,9 +645,9 @@ namespace fly {
 
         for(size_t i=0; i<vk.swapChainImageViews.size(); i++) {
             std::array<VkImageView, 3> attachments = {
-                this->colorTexture->getImageView(),
+                this->msaaColorTexture->getImageView(),
                 this->depthTexture->getImageView(),
-                vk.swapChainImageViews[i]
+                this->hdrColorTexture->getImageView()
             };
         
             VkFramebufferCreateInfo framebufferInfo{};
@@ -664,280 +690,24 @@ namespace fly {
     }
 
 
-
-
-    void Engine::createComputePipeline() {
-        auto computeShaderCode = readFile(COMP_SHADER_SRC);
-        VkShaderModule computeShaderModule = createShaderModule(vk.device, computeShaderCode);
-
-        VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
-        computeShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        computeShaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        computeShaderStageInfo.module = computeShaderModule;
-        computeShaderStageInfo.pName = "main";
-
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &this->computeDescriptorSetLayout;
-
-        if(vkCreatePipelineLayout(vk.device, &pipelineLayoutInfo, nullptr, &this->computePipelineLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute pipeline layout!");
-        }
-
-        VkComputePipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        pipelineInfo.layout = this->computePipelineLayout;
-        pipelineInfo.stage = computeShaderStageInfo;
-
-        if(vkCreateComputePipelines(vk.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &this->computePipeline) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute pipeline!");
-        }
-
-        vkDestroyShaderModule(vk.device, computeShaderModule, nullptr);
-    }
-
-    void Engine::createComputeDescriptorSetLayout() {
-        VkDescriptorSetLayoutBinding inputImageBinding{};
-        inputImageBinding.binding = 0;
-        inputImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        inputImageBinding.descriptorCount = 1;
-        inputImageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-        VkDescriptorSetLayoutBinding outputImageBinding{};
-        outputImageBinding.binding = 1;
-        outputImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        outputImageBinding.descriptorCount = 1;
-        outputImageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings = {inputImageBinding, outputImageBinding};
-        
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        if(vkCreateDescriptorSetLayout(vk.device, &layoutInfo, nullptr, &this->computeDescriptorSetLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute descriptor set layout!");
-        }
-    }
-
-    void Engine::createComputeResources() {
-        this->computeInputImages.resize(MAX_FRAMES_IN_FLIGHT);
-        this->computeOutputImages.resize(MAX_FRAMES_IN_FLIGHT);
-
-        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            this->computeInputImages[i] = std::make_unique<Texture>(
-                this->vk, 
-                vk.swapChainExtent.width, vk.swapChainExtent.height, 
-                VK_FORMAT_R8G8B8A8_UNORM, 
-                VK_SAMPLE_COUNT_1_BIT,
-                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                VK_IMAGE_ASPECT_COLOR_BIT
-            );
-
-            this->computeOutputImages[i] = std::make_unique<Texture>(
-                this->vk, 
-                vk.swapChainExtent.width, vk.swapChainExtent.height, 
-                VK_FORMAT_R8G8B8A8_UNORM, 
-                VK_SAMPLE_COUNT_1_BIT,
-                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                VK_IMAGE_ASPECT_COLOR_BIT
-            );
-        }
-
-        std::array<VkDescriptorPoolSize, 2> poolSizes{};
-        poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        if(vkCreateDescriptorPool(vk.device, &poolInfo, nullptr, &this->computeDescriptorPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute descriptor pool!");
-        }
-
-        this->computeDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, this->computeDescriptorSetLayout);
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = this->computeDescriptorPool;
-        allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        allocInfo.pSetLayouts = layouts.data();
-    
-        if(vkAllocateDescriptorSets(vk.device, &allocInfo, this->computeDescriptorSets.data()) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate descriptor sets!");
-        }
-
-        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            VkDescriptorImageInfo inputImageInfo{};
-            inputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            inputImageInfo.imageView = this->computeInputImages[i]->getImageView();
-
-            VkDescriptorImageInfo outputImageInfo{};
-            outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            outputImageInfo.imageView = this->computeOutputImages[i]->getImageView();
-
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
-            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = this->computeDescriptorSets[i];
-            descriptorWrites[0].dstBinding = 0;
-            descriptorWrites[0].dstArrayElement = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pImageInfo = &inputImageInfo;
-
-            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = this->computeDescriptorSets[i];
-            descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].dstArrayElement = 0;
-            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pImageInfo = &outputImageInfo;
-
-            vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-        }
-    }
-
-    void Engine::applyGrayscaleFilter(VkCommandBuffer commandBuffer, VkImage inputImage) {
-        auto& computeInputImage = this->computeInputImages[this->currentFrame];  // Use currentFrame, not imageIndex!
-        auto& computeOutputImage = this->computeOutputImages[this->currentFrame];
-
+    void Engine::applyFilters(VkCommandBuffer commandBuffer, VkImage swapchainImage) {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         
-        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+        if(vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
             throw std::runtime_error("failed to begin recording command buffer!");
-        }
 
-        //swapchain image from color attach to transfer src
-        transitionImageLayout(
-            commandBuffer, inputImage,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_ACCESS_TRANSFER_READ_BIT,
-            1, false
-        );
 
-        //compute input image from undef to transfer dst
-        transitionImageLayout(
-            commandBuffer, computeInputImage->getImage(),
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            1, false
-        );
+        auto colorImage = this->hdrColorTexture->getImage();
+        for(auto& [id, f]: filters)
+            f->applyFilter(commandBuffer, colorImage, colorImage, this->currentFrame);
 
-        // Copy from swapchain to compute input
-        VkImageCopy copyRegion{};
-        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.extent = {vk.swapChainExtent.width, vk.swapChainExtent.height, 1};
 
-        vkCmdCopyImage(
-            commandBuffer,
-            inputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            computeInputImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &copyRegion
-        );
+        this->tonemapFilter->applyFilter(commandBuffer, colorImage, swapchainImage, this->currentFrame);
 
-        //compute input image from transfer dst to general
-        transitionImageLayout(
-            commandBuffer, computeInputImage->getImage(),
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_ACCESS_SHADER_READ_BIT,
-            1, false
-        );
-
-        //compute output image from undef to general
-        transitionImageLayout(
-            commandBuffer, computeOutputImage->getImage(),
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            VK_ACCESS_SHADER_WRITE_BIT,
-            1, false
-        );
-
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, this->computePipeline);
-        vkCmdBindDescriptorSets(
-            commandBuffer, 
-            VK_PIPELINE_BIND_POINT_COMPUTE, 
-            this->computePipelineLayout, 
-            0, 
-            1, 
-            &this->computeDescriptorSets[this->currentFrame], 
-            0, 
-            nullptr
-        );
-        uint32_t groupCountX = vk.swapChainExtent.width / 16;
-        uint32_t groupCountY = vk.swapChainExtent.height / 16;
-        vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
-
-        //compute output image from general to transfer src
-        transitionImageLayout(
-            commandBuffer, computeOutputImage->getImage(),
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_ACCESS_SHADER_WRITE_BIT,
-            VK_ACCESS_TRANSFER_READ_BIT,
-            1, false
-        );
-
-        //swapchain image from transfer src to transfer dst
-        transitionImageLayout(
-            commandBuffer, inputImage,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_ACCESS_TRANSFER_READ_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            1, false
-        );
-
-        vkCmdCopyImage(
-            commandBuffer,
-            computeOutputImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            inputImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &copyRegion
-        );
-
-        //swapchain image from transfer dst to color attach
-        transitionImageLayout(
-            commandBuffer, inputImage,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            1, false
-        );
-
-        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
             throw std::runtime_error("failed to record compute command buffer!");
-        }
     }
 
 }

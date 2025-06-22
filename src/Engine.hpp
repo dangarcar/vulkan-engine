@@ -2,6 +2,9 @@
 
 #include "Window.hpp"
 #include "renderer/ui/UIRenderer.hpp"
+#include "renderer/FilterPipeline.hpp"
+
+#include <map>
 
 namespace fly {
 
@@ -32,15 +35,30 @@ namespace fly {
         }
 
         template<typename T>
-        T* addPipeline() {
+        T* addPipeline(bool background = false) {
             static_assert(std::is_base_of<IGraphicsPipeline, T>::value);
             auto pip = std::make_unique<T>(this->vk);
             auto ptr = pip.get();
             pip->allocate(this->renderPass, this->msaaSamples);
-            graphicPipelines.emplace_back(std::move(pip));
+            if(background)
+                graphicPipelines.insert(graphicPipelines.begin(), std::move(pip));
+            else
+                graphicPipelines.emplace_back(std::move(pip));
             return ptr;
         }
     
+        template<typename T>
+        uint64_t addFilter() {
+            static_assert(std::is_base_of<FilterPipeline, T>::value);
+            auto filter = std::make_unique<T>(vk);
+            filter->allocate();
+            this->filters.insert(std::make_pair(this->globalFilterId, std::move(filter)));
+            return this->globalFilterId++;
+        }
+
+        void removeFilter(uint64_t filterId);
+        void removeFilters();
+
         Window& getWindow() { return this->window; }
         const Window& getWindow() const { return this->window; }
         const VulkanInstance& getVulkanInstance() const { return this->vk; } 
@@ -63,26 +81,28 @@ namespace fly {
         VkRenderPass renderPass;
         
         std::vector<VkFramebuffer> swapChainFramebuffers;
-        std::vector<VkCommandBuffer> commandBuffers;
+        std::vector<VkCommandBuffer> commandBuffers, computeCommandBuffers;
         
         std::vector<std::unique_ptr<IGraphicsPipeline>> graphicPipelines;
 
         VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-        std::unique_ptr<Texture> colorTexture;
+        VkFormat hdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+        std::unique_ptr<Texture> msaaColorTexture, hdrColorTexture;
         std::unique_ptr<Texture> depthTexture;
 
         std::vector<VkSemaphore> imageAvailableSemaphores;
         std::vector<VkSemaphore> renderPassFinishedSemaphores;
         std::vector<VkSemaphore> computePassFinishedSemaphores;
         std::vector<VkFence> inFlightFences;
-    
-        VkDescriptorSetLayout computeDescriptorSetLayout = VK_NULL_HANDLE;
-        VkPipelineLayout computePipelineLayout = VK_NULL_HANDLE;
-        VkPipeline computePipeline = VK_NULL_HANDLE;
-        VkDescriptorPool computeDescriptorPool;
-        std::vector<VkDescriptorSet> computeDescriptorSets;
-        std::vector<std::unique_ptr<Texture>> computeInputImages, computeOutputImages;
-        std::vector<VkCommandBuffer> computeCommandBuffers;
+
+        std::unique_ptr<TonemapFilter> tonemapFilter;
+        struct FilterDetachInfo { 
+            std::unique_ptr<FilterPipeline> pipeline; 
+            uint32_t frame; 
+        };
+        std::map<uint64_t, std::unique_ptr<FilterPipeline>> filters;
+        std::queue<FilterDetachInfo> filterDetachPending;
+        uint64_t globalFilterId = 0;
 
     private:
         void drawFrame();
@@ -102,11 +122,8 @@ namespace fly {
         void createColorAndDepthTextures();
         void createFramebuffers();
         void createSyncObjects();
-
-        void createComputePipeline();
-        void createComputeDescriptorSetLayout();
-        void createComputeResources();
-        void applyGrayscaleFilter(VkCommandBuffer commandBuffer, VkImage inputImage);
+        
+        void applyFilters(VkCommandBuffer commandBuffer, VkImage swapchainImage);
 
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
         VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);

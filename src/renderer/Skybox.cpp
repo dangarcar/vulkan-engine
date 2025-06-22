@@ -8,7 +8,7 @@ namespace fly {
     Skybox::Skybox(Engine& engine, std::unique_ptr<Texture> cubemap, std::unique_ptr<TextureSampler> cubemapSampler): cubemapSampler(std::move(cubemapSampler)),cubemap(std::move(cubemap)) {
         assert(this->cubemap->isCubemap());
 
-        this->pipeline = engine.addPipeline<SkyboxPipeline>(); //Render in the background
+        this->pipeline = engine.addPipeline<SkyboxPipeline>(true); //Render in the background
 
         this->uniformBuffer = std::make_unique<TUniformBuffer<UBOSkybox>>(engine.getVulkanInstance());
 

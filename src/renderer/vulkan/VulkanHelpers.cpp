@@ -93,8 +93,8 @@ namespace fly {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
     
-        vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(vk.graphicsQueue);
+        vkQueueSubmit(vk.computeQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(vk.computeQueue);
     
         vkFreeCommandBuffers(vk.device, commandPool, 1, &commandBuffer);
     }

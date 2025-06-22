@@ -18,6 +18,13 @@ FetchContent_Declare(imgui_external GIT_REPOSITORY https://github.com/ocornut/im
 FetchContent_MakeAvailable(imgui_external)
 
 #Thanks to u/Kakod123 on https://www.reddit.com/r/vulkan/comments/1h6ta10/include_ktx_lib_to_project/ for this snippet
+set(KTX_FEATURE_GL_UPLOAD OFF)
+set(KTX_FEATURE_TOOLS OFF)
+set(KTX_FEATURE_TESTS OFF)
+set(KTX_FEATURE_ETC_UNPACK OFF)
+set(KTX_FEATURE_JNI OFF)
+set(KTX_FEATURE_PY OFF)
+set(KTX_FEATURE_LOADTEST_APPS OFF) 
 message(NOTICE "Fetching LibKTX from https://github.com/KhronosGroup/KTX-Software ...")
 set(KTX_FEATURE_STATIC_LIBRARY ON CACHE BOOL "Build KTX as a static library" FORCE)
 FetchContent_Declare(
@@ -45,8 +52,11 @@ include_directories(external/ktx/other_include)
 
 file(GLOB_RECURSE sources *.cpp)
 add_library(fly_engine STATIC ${sources})
-target_link_libraries(fly_engine PUBLIC glfw ${GLFW_LIBRARIES} Vulkan::Vulkan glm imgui ktx)
+
+target_link_libraries(fly_engine PRIVATE glfw ${GLFW_LIBRARIES} ktx)
 target_include_directories(fly_engine PRIVATE ${fetch_ktx_SOURCE_DIR}/include)
+
+target_link_libraries(fly_engine PUBLIC glfw ${GLFW_LIBRARIES} Vulkan::Vulkan glm imgui)
 target_include_directories(fly_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(fly_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 

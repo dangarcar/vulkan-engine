@@ -19,7 +19,6 @@ namespace fly {
         alignas(16) glm::mat4 model;
         alignas(16) glm::mat4 view;
         alignas(16) glm::mat4 proj;
-        float gamma;
     };
 
     struct Vertex {
