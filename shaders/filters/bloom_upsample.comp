@@ -1,0 +1,40 @@
+#version 450
+
+layout(binding = 0) uniform sampler2D inputSampler;
+layout(binding = 1, rgba16f) uniform image2D outputImage;
+layout(push_constant) uniform UpsamplePush {
+    vec2 invNormCurrResolution;
+	vec2 filterRadius;
+    float bloomIntensity;
+} push;
+
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+void main() {
+    ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+    vec2 texCoord = texelCoord * push.invNormCurrResolution;
+    float x = push.filterRadius.x;
+    float y = push.filterRadius.y;
+
+    vec3 a = texture(inputSampler, vec2(texCoord.x - x, texCoord.y + y)).rgb;
+    vec3 b = texture(inputSampler, vec2(texCoord.x,     texCoord.y + y)).rgb;
+    vec3 c = texture(inputSampler, vec2(texCoord.x + x, texCoord.y + y)).rgb;
+
+    vec3 d = texture(inputSampler, vec2(texCoord.x - x, texCoord.y)).rgb;
+    vec3 e = texture(inputSampler, vec2(texCoord.x,     texCoord.y)).rgb;
+    vec3 f = texture(inputSampler, vec2(texCoord.x + x, texCoord.y)).rgb;
+
+    vec3 g = texture(inputSampler, vec2(texCoord.x - x, texCoord.y - y)).rgb;
+    vec3 h = texture(inputSampler, vec2(texCoord.x,     texCoord.y - y)).rgb;
+    vec3 i = texture(inputSampler, vec2(texCoord.x + x, texCoord.y - y)).rgb;
+
+    vec3 bloom = e*4.0;
+    bloom += (b+d+f+h)*2.0;
+    bloom += (a+c+g+i);
+    bloom *= 1.0 / 16.0;
+
+    vec4 outColor = imageLoad(outputImage, texelCoord);
+    outColor.rgb += bloom * push.bloomIntensity;
+
+    imageStore(outputImage, texelCoord, outColor);
+}

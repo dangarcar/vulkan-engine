@@ -3,6 +3,7 @@
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanConstants.h"
 #include "vulkan/VulkanHelpers.hpp"
+#include <cstring>
 
 namespace fly {
 
@@ -30,7 +31,7 @@ namespace fly {
         const T& getUBO() const { return ubo; }
 
         void updateUBO(const T& ubo, uint32_t currentFrame) {
-            memcpy(this->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+            std::memcpy(this->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
         }
 
     

@@ -56,6 +56,16 @@ namespace fly {
             return this->globalFilterId++;
         }
 
+        template<typename T>
+        T& getFilter(uint64_t filterId) {
+            static_assert(std::is_base_of<FilterPipeline, T>::value);
+            auto ptr = dynamic_cast<T*>(this->filters[filterId].get());
+            if(ptr == nullptr) 
+                throw std::runtime_error(std::format("There is no filter with id {}", filterId));
+            return *ptr;
+        }
+
+        TonemapFilter& getTonemapper() { return *this->tonemapFilter; }
         void removeFilter(uint64_t filterId);
         void removeFilters();
 

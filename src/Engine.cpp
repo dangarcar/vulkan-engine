@@ -1,13 +1,11 @@
 #include "Engine.hpp"
+
 #include "renderer/vulkan/VulkanConstants.h"
 #include "renderer/vulkan/VulkanHelpers.hpp"
 
-#include <chrono>
-#include <cstdint>
+#include <GLFW/glfw3.h>
 #include <imgui.h>
 
-#include <iostream>
-#include <memory>
 #include <set>
 
 static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
@@ -65,7 +63,7 @@ namespace fly {
             window.handleInput();
             if(window.isFramebufferResized())
                 uiRenderer->resize(window.getWidth(), window.getHeight()); 
-            
+
             while(!this->filterDetachPending.empty()) {
                 FilterDetachInfo& info = this->filterDetachPending.front();
                 if(info.frame != currentFrame) 
