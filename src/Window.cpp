@@ -10,13 +10,28 @@
 
 namespace fly {
 
-    Window::Window(int width, int height): width(width), height(height) {
+    Window::Window(const char* name): Window{name, 1, 1} {   
+        auto monitor = glfwGetPrimaryMonitor();
+        glfwGetWindowPos(this->window, &this->posX, &this->posY);
+
+        auto mode = glfwGetVideoMode(monitor);
+        this->width = mode->width;
+        this->height = mode->height;
+        glfwSetWindowMonitor(window, monitor, 0, 0, width, height, mode->refreshRate);
+
+        this->windowedWidth = width / 2;
+        this->windowedHeight = height / 2;
+    }
+
+    Window::Window(const char* name, int width, int height): name{name}, width{width}, height{height} {
         glfwInit();
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+        glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);
+        glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 
-        this->window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
+        this->window = glfwCreateWindow(width, height, name, nullptr, nullptr);
         glfwSetWindowUserPointer(this->window, this);
 
         glfwSetFramebufferSizeCallback(this->window, this->framebufferResizeCallback);
@@ -28,6 +43,24 @@ namespace fly {
     Window::~Window() {
         glfwDestroyWindow(this->window);
         glfwTerminate();
+    }
+
+    void Window::toggleFullscreen() {
+        auto monitor = glfwGetWindowMonitor(window);
+        this->framebufferResized = true;
+
+        if(monitor) {
+            glfwSetWindowMonitor(window, nullptr, this->posX, this->posY, this->windowedWidth, this->windowedHeight, GLFW_DONT_CARE);
+        } else {
+            glfwGetWindowPos(window, &this->posX, &this->posY);
+            glfwGetWindowSize(window, &this->windowedWidth, &this->windowedHeight);
+
+            monitor = glfwGetPrimaryMonitor();
+            auto mode = glfwGetVideoMode(monitor);
+            this->width = mode->width;
+            this->height = mode->height;
+            glfwSetWindowMonitor(window, monitor, 0, 0, width, height, mode->refreshRate);
+        }
     }
 
     bool Window::shouldClose() const {

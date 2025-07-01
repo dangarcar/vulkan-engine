@@ -61,6 +61,9 @@ namespace fly {
             time = std::chrono::system_clock::now();
 
             window.handleInput();
+            if(window.keyJustPressed(GLFW_KEY_F11))
+                window.toggleFullscreen();
+
             if(window.isFramebufferResized())
                 uiRenderer->resize(window.getWidth(), window.getHeight()); 
 

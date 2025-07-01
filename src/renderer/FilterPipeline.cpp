@@ -526,8 +526,8 @@ namespace fly {
             0, 
             nullptr
         );
-        uint32_t groupCountX = vk.swapChainExtent.width / 16;
-        uint32_t groupCountY = vk.swapChainExtent.height / 16;
+        uint32_t groupCountX = (vk.swapChainExtent.width + 15) / 16;
+        uint32_t groupCountY = (vk.swapChainExtent.height + 15) / 16;
         vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
 
         //compute output image from general to transfer src
@@ -586,7 +586,6 @@ namespace fly {
         vkDestroyPipeline(vk.device, this->upsamplePipeline, nullptr);
         vkDestroyPipelineLayout(vk.device, this->upsamplePipelineLayout, nullptr);
     }
-
 
     std::vector<char> BloomFilter::getShaderCode() {
         return readFile(BLOOM_DOWNSAMPLE_SHADER_SRC);

@@ -15,7 +15,8 @@ namespace fly {
 
     class Window {
     public:
-        Window(int width, int height);
+        Window(const char* name);
+        Window(const char* name, int width, int height);
         ~Window();
         
         void handleInput();
@@ -25,6 +26,8 @@ namespace fly {
 
         std::vector<const char*> getRequiredExtensions();
         
+        void toggleFullscreen();
+
         int getWidth() const { return width; }
         int getHeight() const { return height; }
 
@@ -48,8 +51,11 @@ namespace fly {
 
     private:
         GLFWwindow* window;
+        const char* name;
         bool framebufferResized = false;
         int width, height;
+        int windowedWidth, windowedHeight;
+        int posX, posY;
 
         static constexpr int NUM_KEYS = 1024;
         std::bitset<NUM_KEYS> oldKeyStates = false, keyStates = false;

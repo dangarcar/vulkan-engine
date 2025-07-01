@@ -21,7 +21,10 @@ namespace fly {
 
     class Engine {
     public:
-        Engine(int width, int height): window(width, height) {}
+        //Creates a fullscreen engine
+        Engine(const char* name): window(name) {}
+        //Creates a windowed engine with given width and height
+        Engine(const char* name, int width, int height): window(name, width, height) {}
         ~Engine();
         
         void init();
