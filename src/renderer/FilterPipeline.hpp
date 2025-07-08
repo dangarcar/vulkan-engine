@@ -35,14 +35,11 @@ namespace fly {
         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
         VkPipeline pipeline = VK_NULL_HANDLE;
     
-        static std::pair<VkPipeline, VkPipelineLayout> createComputePipeline(const VulkanInstance& vk, VkDescriptorSetLayout descriptorSetLayout, const std::vector<char>& shaderCode, size_t pushConstantSize);
-        static std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> allocateDescriptorSets(const VulkanInstance& vk, VkDescriptorSetLayout descriptorSetLayout, VkDescriptorPool descriptorPool);
-    
     };
 
     class GrayscaleFilter: public FilterPipeline {
     private:
-        static constexpr const char* GRAYSCALE_SHADER_SRC = "vulkan-engine/shaders/filters/grayscale.spv";
+        static constexpr const char* GRAYSCALE_SHADER_SRC = "vulkan-engine/shaders/filters/bin/grayscale.comp.spv";
     public:
         GrayscaleFilter(const VulkanInstance& vk): FilterPipeline(vk) {}
 
@@ -61,7 +58,7 @@ namespace fly {
 
     class TonemapFilter: public FilterPipeline {
     private:
-        static constexpr const char* TONEMAP_SHADER_SRC = "vulkan-engine/shaders/filters/tonemap.spv";
+        static constexpr const char* TONEMAP_SHADER_SRC = "vulkan-engine/shaders/filters/bin/tonemap.comp.spv";
     public:
         struct UBO {
             float exposure;
@@ -87,8 +84,8 @@ namespace fly {
 
     class BloomFilter: public FilterPipeline {
     private:
-        static constexpr const char* BLOOM_DOWNSAMPLE_SHADER_SRC = "vulkan-engine/shaders/filters/bloom_downsample.spv";
-        static constexpr const char* BLOOM_UPSAMPLE_SHADER_SRC = "vulkan-engine/shaders/filters/bloom_upsample.spv";
+        static constexpr const char* BLOOM_DOWNSAMPLE_SHADER_SRC = "vulkan-engine/shaders/filters/bin/bloom_downsample.comp.spv";
+        static constexpr const char* BLOOM_UPSAMPLE_SHADER_SRC = "vulkan-engine/shaders/filters/bin/bloom_upsample.comp.spv";
         static constexpr int BLOOM_LEVELS = 5;
     public:
         struct UpsamplePush { glm::vec2 invNormCurrResolution, filterRadius; float bloomIntensity; };

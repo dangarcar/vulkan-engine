@@ -5,8 +5,8 @@
 #include "renderer/vulkan/VulkanTypes.h"
 #include <memory>
 
-static const char* const FRAG_TEXT_SHADER_SRC = "vulkan-engine/shaders/textfrag.spv";
-static const char* const VERT_TEXT_SHADER_SRC = "vulkan-engine/shaders/textvert.spv";
+static const char* const FRAG_TEXT_SHADER_SRC = "vulkan-engine/shaders/bin/text.frag.spv";
+static const char* const VERT_TEXT_SHADER_SRC = "vulkan-engine/shaders/bin/text.vert.spv";
 
 namespace fly {
 

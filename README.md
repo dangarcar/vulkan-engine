@@ -35,6 +35,10 @@ cmake ..
 cmake --build .
 ```
 
+6. Compile the shaders:
+Run either `compile_shaders.ps1` on Windows or `compile_shaders.bash` on Linux (or Mac)
+In order to run this you need to have glslc added to your path, although I think it's added with the installation of the Vulkan SDK
+
 In the end you should have this project folder structure:
 ```
 |

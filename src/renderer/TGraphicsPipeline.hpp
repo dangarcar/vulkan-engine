@@ -78,7 +78,7 @@ namespace fly {
             MeshData data;
             data.vertexArray = std::move(vertexArray);
             data.descriptorPool = createDescriptorPool();
-            data.descriptorSets = TGraphicsPipeline::allocateDescriptorSets(this->vk, this->descriptorSetLayout, data.descriptorPool);
+            data.descriptorSets = allocateDescriptorSets(this->vk, this->descriptorSetLayout, data.descriptorPool);
             data.instanceCount = instanceCount;
     
             meshes[globalId] = std::move(data);
@@ -323,26 +323,6 @@ namespace fly {
             vkDestroyShaderModule(vk.device, vertShaderModule, nullptr);
         
             return std::make_pair(graphicsPipeline, pipelineLayout);
-        }
-
-        static std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> allocateDescriptorSets(
-            const VulkanInstance& vk, 
-            VkDescriptorSetLayout descriptorSetLayout,
-            VkDescriptorPool descriptorPool
-        ) {
-            std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
-            VkDescriptorSetAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfo.descriptorPool = descriptorPool;
-            allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-            allocInfo.pSetLayouts = layouts.data();
-    
-            std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> descriptorSets;
-            if(vkAllocateDescriptorSets(vk.device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
-                throw std::runtime_error("failed to allocate descriptor sets!");
-            }
-    
-            return descriptorSets;
         } 
 
     };

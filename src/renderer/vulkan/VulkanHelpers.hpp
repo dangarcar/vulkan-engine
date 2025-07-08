@@ -1,6 +1,9 @@
 #pragma once 
 
+#include <array>
+
 #include "VulkanTypes.h"
+#include "VulkanConstants.h"
 
 namespace fly {
 
@@ -120,6 +123,18 @@ namespace fly {
         bool cubemap
     );
 
+    std::pair<VkPipeline, VkPipelineLayout> createComputePipeline(
+        const VulkanInstance& vk, 
+        VkDescriptorSetLayout descriptorSetLayout, 
+        const std::vector<char>& shaderCode, 
+        size_t pushConstantSize
+    );
+
+    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> allocateDescriptorSets(
+        const VulkanInstance& vk, 
+        VkDescriptorSetLayout descriptorSetLayout,
+        VkDescriptorPool descriptorPool
+    );
 
     //INLINE DEFINITIONS
     inline VkFormat findDepthFormat(const VkPhysicalDevice physicalDevice) {

@@ -5,9 +5,6 @@
 #include <set>
 #include <cstring>
 
-#include "VulkanConstants.h"
-#include "VulkanTypes.h"
-
 
 namespace fly {
     
@@ -595,6 +592,77 @@ namespace fly {
         }
     
         vkBindImageMemory(vk.device, image, imageMemory, 0);
+    }
+
+    
+    std::pair<VkPipeline, VkPipelineLayout> createComputePipeline(
+        const VulkanInstance& vk, 
+        VkDescriptorSetLayout descriptorSetLayout, 
+        const std::vector<char>& shaderCode, 
+        size_t pushConstantSize
+    ) {
+        VkShaderModule computeShaderModule = createShaderModule(vk.device, shaderCode);
+
+        VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
+        computeShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        computeShaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        computeShaderStageInfo.module = computeShaderModule;
+        computeShaderStageInfo.pName = "main";
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+
+        if(pushConstantSize > 0) {
+            VkPushConstantRange pushConstant;
+            pushConstant.offset = 0;
+	        pushConstant.size = pushConstantSize;
+	        pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+            pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
+	        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        }
+
+        VkPipelineLayout pipelineLayout;
+        if(vkCreatePipelineLayout(vk.device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create compute pipeline layout!");
+        }
+
+        VkComputePipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        pipelineInfo.layout = pipelineLayout;
+        pipelineInfo.stage = computeShaderStageInfo;
+
+        VkPipeline pipeline;
+        if(vkCreateComputePipelines(vk.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create compute pipeline!");
+        }
+
+        vkDestroyShaderModule(vk.device, computeShaderModule, nullptr);
+
+        return std::make_pair(pipeline, pipelineLayout);
+    }
+
+    
+    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> allocateDescriptorSets(
+        const VulkanInstance& vk, 
+        VkDescriptorSetLayout descriptorSetLayout,
+        VkDescriptorPool descriptorPool
+    ) {
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        allocInfo.pSetLayouts = layouts.data();
+
+        std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> descriptorSets;
+        if(vkAllocateDescriptorSets(vk.device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate descriptor sets!");
+        }
+
+        return descriptorSets;
     }
 
 }

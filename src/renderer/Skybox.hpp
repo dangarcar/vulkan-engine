@@ -10,8 +10,8 @@
 #include "Texture.hpp"
 
 
-static const char* const SKYBOX_FRAG_SHADER_SRC = "vulkan-engine/shaders/skyboxfrag.spv";
-static const char* const SKYBOX_VERT_SHADER_SRC = "vulkan-engine/shaders/skyboxvert.spv";
+static const char* const SKYBOX_FRAG_SHADER_SRC = "vulkan-engine/shaders/bin/skybox.frag.spv";
+static const char* const SKYBOX_VERT_SHADER_SRC = "vulkan-engine/shaders/bin/skybox.vert.spv";
 
 namespace fly {
 

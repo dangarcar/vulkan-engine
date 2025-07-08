@@ -38,15 +38,15 @@ namespace fly {
         VkSampleCountFlagBits numSamples,
         VkImageUsageFlags usage,
         VkImageAspectFlags aspectFlags
-    ): mipLevels{1}, vk{vk}, cubemap{false}
+    ): mipLevels{1}, width{width}, height{height}, format{format}, vk{vk}, cubemap{false}
     {
         createImage(
             this->vk,
-            width, 
-            height, 
+            this->width, 
+            this->height, 
             1, 
             numSamples, 
-            format, 
+            this->format, 
             VK_IMAGE_TILING_OPTIMAL, 
             usage, 
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
@@ -55,38 +55,40 @@ namespace fly {
             false
         );
         
-        this->imageView = createImageView(this->vk, this->image, format, aspectFlags, 1, false);
+        this->imageView = createImageView(this->vk, this->image, this->format, aspectFlags, 1, false);
     }
 
     //PNG OR JPEG WITH MIPMAP GENERATION
     Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format):
-        vk{vk}, cubemap{false}
+        format{format}, vk{vk}, cubemap{false}
     {
         ScopeTimer t(std::format("Texture load {}", path.string())); //TODO: remove timer
 
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load(path.string().c_str(), &texWidth, &texHeight, &texChannels, static_cast<int>(stbFormat));
+        this->width = texWidth; 
+        this->height = texHeight;
         VkDeviceSize imageSize;
         if(stbFormat == STB_Format::STBI_rgb_alpha)
-            imageSize = texHeight * texWidth * 4;
+            imageSize = this->width * this->height * 4;
         else
-            imageSize = texHeight * texWidth * texChannels;
+            imageSize = this->width * this->height * texChannels;
 
         if (!pixels) {
             throw std::runtime_error("failed to load texture image!");
         }
 
-        _createTextureFromPixels(vk, commandPool, texWidth, texHeight, pixels, imageSize, format);
+        _createTextureFromPixels(vk, commandPool, pixels, imageSize);
 
         stbi_image_free(pixels);
     }
 
     //DEFAULT TEXTURE
     Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool): 
-        vk{vk}, cubemap{false} 
+        width{2}, height{2}, format{VK_FORMAT_R8G8B8A8_SRGB}, vk{vk}, cubemap{false}
     {
         uint32_t pixels[4] = { 0xFFFF00FFu, 0xFF000000u, 0xFF000000u, 0xFFFF00FFu };
-        _createTextureFromPixels(vk, commandPool, 2, 2, pixels, sizeof(pixels), VK_FORMAT_R8G8B8A8_SRGB);
+        _createTextureFromPixels(vk, commandPool, pixels, sizeof(pixels));
     }
 
     //KTX TEXTURE WITH MIPMAPS INCLUDED IN BC7
@@ -117,13 +119,14 @@ namespace fly {
 
         this->mipLevels = texture->numLevels;
         this->cubemap = texture->isCubemap;
-        uint32_t width  = texture->baseWidth;
-        uint32_t height = texture->baseHeight;
+        this->width  = texture->baseWidth;
+        this->height = texture->baseHeight;
+        this->format = ktxTexture2_GetVkFormat(texture);
         
         std::vector<VkBufferImageCopy> regions;
         for(uint32_t mip = 0; mip < this->mipLevels; ++mip) {
-            uint32_t mipWidth  = std::max(1u, width >> mip);
-            uint32_t mipHeight = std::max(1u, height >> mip);
+            uint32_t mipWidth  = std::max(1u, this->width >> mip);
+            uint32_t mipHeight = std::max(1u, this->height >> mip);
         
             for(uint32_t face = 0; face < texture->numFaces; ++face) {
                 ktx_size_t offset;
@@ -151,9 +154,8 @@ namespace fly {
         ktxTexture_Destroy(reinterpret_cast<ktxTexture*>(texture));
     }
 
-    void Texture::_createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format) {        
-        this->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
-    
+    void Texture::_createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize) {        
+        this->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(this->width, this->height)))) + 1;
         
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -174,11 +176,11 @@ namespace fly {
         
         createImage(
             vk,    
-            width, 
-            height, 
+            this->width, 
+            this->height, 
             this->mipLevels,
             VK_SAMPLE_COUNT_1_BIT,
-            format, 
+            this->format, 
             VK_IMAGE_TILING_OPTIMAL, 
             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
@@ -207,16 +209,16 @@ namespace fly {
                 commandBuffer,    
                 stagingBuffer, 
                 this->image, 
-                static_cast<uint32_t>(width), 
-                static_cast<uint32_t>(height),
+                static_cast<uint32_t>(this->width), 
+                static_cast<uint32_t>(this->height),
                 this->cubemap
             );
             
             generateMipmaps(
                 vk, commandBuffer,    
                 this->image, 
-                format, 
-                width, height, 
+                this->format, 
+                this->width, this->height, 
                 this->mipLevels,
                 this->cubemap
             );
@@ -227,14 +229,10 @@ namespace fly {
         vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
         vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
 
-        this->imageView = createImageView(vk, this->image, format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
+        this->imageView = createImageView(vk, this->image, this->format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
     }
 
     void Texture::_createTextureFromKtx2(const VulkanInstance& vk, const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions) {
-        auto width = texture->baseWidth;
-        auto height = texture->baseHeight;
-        auto format = ktxTexture2_GetVkFormat(texture);
-
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         
@@ -254,11 +252,11 @@ namespace fly {
     
         createImage(
             vk,    
-            width, 
-            height, 
+            this->width, 
+            this->height, 
             this->mipLevels,
             VK_SAMPLE_COUNT_1_BIT,
-            format, 
+            this->format, 
             VK_IMAGE_TILING_OPTIMAL, 
             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
@@ -311,7 +309,7 @@ namespace fly {
         vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
         vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
 
-        this->imageView = createImageView(vk, this->image, format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
+        this->imageView = createImageView(vk, this->image, this->format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
     }
 
 
@@ -320,6 +318,69 @@ namespace fly {
         vkDestroyImage(vk.device, this->image, nullptr);
         vkFreeMemory(vk.device, this->imageMemory, nullptr);
     }
+
+    std::unique_ptr<Texture> Texture::copyToFormat(VkFormat newFormat, VkImageUsageFlags usage, VkCommandBuffer commandBuffer) const {
+        auto newTexture = std::make_unique<fly::Texture>(
+            vk, this->width, this->height, 
+            newFormat, 
+            VK_SAMPLE_COUNT_1_BIT,
+            usage,
+            VK_IMAGE_ASPECT_COLOR_BIT
+        );
+        
+        fly::transitionImageLayout(
+            commandBuffer, 
+            this->image, 
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_ACCESS_SHADER_READ_BIT, 
+            VK_ACCESS_TRANSFER_READ_BIT, 
+            this->mipLevels,
+            false
+        );
+
+        fly::transitionImageLayout(
+            commandBuffer, 
+            newTexture->image, 
+            VK_IMAGE_LAYOUT_UNDEFINED, 
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 
+            VK_ACCESS_TRANSFER_WRITE_BIT, 
+            newTexture->mipLevels, 
+            false
+        );
+
+        VkImageCopy copyRegion{};
+        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copyRegion.extent = {uint32_t(this->width), uint32_t(this->height), 1};
+        vkCmdCopyImage(
+            commandBuffer,
+            this->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            newTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &copyRegion
+        );
+
+        fly::transitionImageLayout(
+            commandBuffer, 
+            newTexture->image, 
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT, 
+            VK_ACCESS_SHADER_READ_BIT, 
+            newTexture->mipLevels, 
+            false
+        );
+
+        return newTexture;
+    }
+    
 
 
     //TEXTURE SAMPLER
@@ -349,7 +410,10 @@ namespace fly {
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        if(filter == Filter::LINEAR)
+            samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        else if(filter == Filter::NEAREST)
+            samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
         samplerInfo.minLod = 0.0f; 
         samplerInfo.maxLod = static_cast<float>(mipLevels);
         samplerInfo.mipLodBias = 0.0f; // Optional
@@ -362,6 +426,5 @@ namespace fly {
     TextureSampler::~TextureSampler() {
         vkDestroySampler(vk.device, this->textureSampler, nullptr);
     }
-
 
 }

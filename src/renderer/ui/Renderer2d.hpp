@@ -11,8 +11,8 @@
 #include <unordered_map>
 #include <glm/glm.hpp>
 
-static const char* const FRAG2D_SHADER_SRC = "vulkan-engine/shaders/frag2d.spv";
-static const char* const VERT2D_SHADER_SRC = "vulkan-engine/shaders/vert2d.spv";
+static const char* const REND2D_FRAG_SHADER_SRC = "vulkan-engine/shaders/bin/rend2d.frag.spv";
+static const char* const REND2D_VERT_SHADER_SRC = "vulkan-engine/shaders/bin/rend2d.vert.spv";
 
 namespace fly {
 
@@ -133,10 +133,10 @@ namespace fly {
     private:
     
         std::vector<char> getVertShaderCode() override {
-            return readFile(VERT2D_SHADER_SRC);
+            return readFile(REND2D_VERT_SHADER_SRC);
         }
         std::vector<char> getFragShaderCode() override {
-            return readFile(FRAG2D_SHADER_SRC);
+            return readFile(REND2D_FRAG_SHADER_SRC);
         }
 
         VkDescriptorSetLayout createDescriptorSetLayout() override;

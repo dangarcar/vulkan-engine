@@ -58,17 +58,21 @@ namespace fly {
             return { mipLevels, image, imageMemory, imageView };
         }
 
+        std::unique_ptr<Texture> copyToFormat(VkFormat newFormat, VkImageUsageFlags usage, VkCommandBuffer commandBuffer) const;
+
     private:
         uint32_t mipLevels;
         VkImage image;
         VkDeviceMemory imageMemory;
         VkImageView imageView;
-        
+        uint32_t width, height;
+        VkFormat format;
+
         const VulkanInstance& vk;
         bool cubemap = false;
         
     private:
-        void _createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, int width, int height, void* pixels, VkDeviceSize imageSize, VkFormat format);
+        void _createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize);
         void _createTextureFromKtx2(const VulkanInstance& vk, const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions);
         
     };
