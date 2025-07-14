@@ -24,7 +24,7 @@ namespace fly {
     void DefaultPipeline::updateDescriptorSet(
         unsigned meshIndex,
 
-        const TUniformBuffer<DefaultUBO>& uniformBuffer,
+        const TBuffer<DefaultUBO>& uniformBuffer,
         const Texture& texture,
         const TextureSampler& textureSampler
     ) {

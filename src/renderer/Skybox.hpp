@@ -6,7 +6,7 @@
 
 #include "TGraphicsPipeline.hpp"
 #include "TVertexArray.hpp"
-#include "TUniformBuffer.hpp"
+#include "TBuffer.hpp"
 #include "Texture.hpp"
 
 
@@ -45,7 +45,7 @@ namespace fly {
     private:
         SkyboxPipeline* pipeline;
 
-        std::unique_ptr<TUniformBuffer<UBOSkybox>> uniformBuffer;
+        std::unique_ptr<TBuffer<UBOSkybox>> uniformBuffer;
         std::unique_ptr<TextureSampler> cubemapSampler;
         std::unique_ptr<Texture> cubemap;
 
@@ -123,7 +123,7 @@ namespace fly {
         ~SkyboxPipeline() = default;
 
         void updateDescriptorSet(
-            const TUniformBuffer<UBOSkybox>& uniformBuffer,
+            const TBuffer<UBOSkybox>& uniformBuffer,
             const Texture& texture,
             const TextureSampler& textureSampler
         );

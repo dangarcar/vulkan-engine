@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TUniformBuffer.hpp"
+#include "TBuffer.hpp"
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanConstants.h"
 #include <memory>
@@ -72,7 +72,7 @@ namespace fly {
 
     private:
         std::unique_ptr<Texture> computeInputImage, computeOutputImage;
-        std::unique_ptr<TUniformBuffer<UBO>> uniformBuffer;
+        std::unique_ptr<TBuffer<UBO>> uniformBuffer;
         UBO ubo;
 
     protected:

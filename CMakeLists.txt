@@ -6,6 +6,8 @@ project(FlyEngineLibrary)
 
 set(CMAKE_CXX_STANDARD 20)
 
+message("Building in ${CMAKE_BUILD_TYPE} mode")
+
 find_package(Vulkan REQUIRED)
 
 FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)

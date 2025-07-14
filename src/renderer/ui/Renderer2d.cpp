@@ -50,7 +50,7 @@ namespace fly {
 
     void Renderer2d::render(uint32_t currentFrame, VkCommandPool commandPool) {
         //DESTROY OLD UBOS WHEN THEY'RE NOT USED ANYMORE
-        std::vector<std::pair<uint32_t, std::unique_ptr<TUniformBuffer<UBO2D>>>> newUbosToDestroy;
+        std::vector<std::pair<uint32_t, std::unique_ptr<TBuffer<UBO2D>>>> newUbosToDestroy;
         for(auto& p: this->ubosToDestroy) {
             if(currentFrame != p.first) {
                 newUbosToDestroy.push_back(std::move(p));
@@ -72,7 +72,7 @@ namespace fly {
             else if(textureData[k].size() < v.size()) {
                 while(this->textureData[k].size() != v.size()) {
                     TextureData data;
-                    data.uniformBuffer = std::make_unique<TUniformBuffer<UBO2D>>(this->vk);
+                    data.uniformBuffer = std::make_unique<TBuffer<UBO2D>>(this->vk, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
                     auto vertices = this->vertices;
                     auto indices = this->indices;
@@ -92,7 +92,7 @@ namespace fly {
             }
 
             for(size_t i=0; i<v.size(); ++i) {
-                this->textureData[k][i].uniformBuffer->updateUBO(this->textureRenderQueue[k][i].ubo, currentFrame);
+                this->textureData[k][i].uniformBuffer->updateBuffer(this->textureRenderQueue[k][i].ubo, currentFrame);
             }
         }
 
@@ -120,7 +120,7 @@ namespace fly {
     void GPipeline2D::updateDescriptorSet(
         unsigned meshIndex,
 
-        const TUniformBuffer<UBO2D>& uniformBuffer,
+        const TBuffer<UBO2D>& uniformBuffer,
         const Texture& texture,
         const TextureSampler& textureSampler
     ) {

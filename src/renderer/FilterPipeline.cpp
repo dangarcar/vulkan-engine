@@ -133,7 +133,7 @@ namespace fly {
         }
     }
 
-    void GrayscaleFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, VkImage outputImage, uint32_t currentFrame) {
+    void GrayscaleFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, [[maybe_unused]] VkImage outputImage, uint32_t currentFrame) {
         assert(inputImage == outputImage && "Input image is not equal to output image");
         auto swapchainImage = inputImage;
 
@@ -264,7 +264,7 @@ namespace fly {
     }
 
     void TonemapFilter::setUbo(UBO ubo, uint32_t currentFrame) {
-        this->uniformBuffer->updateUBO(ubo, currentFrame);
+        this->uniformBuffer->updateBuffer(ubo, currentFrame);
     }
 
     VkDescriptorPool TonemapFilter::createDescriptorPool() {
@@ -343,7 +343,7 @@ namespace fly {
             VK_IMAGE_ASPECT_COLOR_BIT
         );
 
-        this->uniformBuffer = std::make_unique<TUniformBuffer<UBO>>(vk);
+        this->uniformBuffer = std::make_unique<TBuffer<UBO>>(vk, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
 
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -667,7 +667,7 @@ namespace fly {
         }
     }
 
-    void BloomFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, VkImage outputImage, uint32_t currentFrame) {
+    void BloomFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, [[maybe_unused]] VkImage outputImage, uint32_t currentFrame) {
         assert(inputImage == outputImage && "Input image is not equal to output image");
         auto swapchainImage = inputImage;
 

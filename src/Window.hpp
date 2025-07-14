@@ -30,6 +30,7 @@ namespace fly {
 
         int getWidth() const { return width; }
         int getHeight() const { return height; }
+        glm::vec2 getExtent() const { return {width, height}; }
 
         bool isFramebufferResized() const { return framebufferResized; }
         bool shouldClose() const;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "TGraphicsPipeline.hpp"
-#include "TUniformBuffer.hpp"
+#include "TBuffer.hpp"
 #include "TVertexArray.hpp"
 
 #include "Texture.hpp"
@@ -41,7 +41,7 @@ namespace fly {
         void updateDescriptorSet(
             unsigned meshIndex,
 
-            const TUniformBuffer<DefaultUBO>& uniformBuffer,
+            const TBuffer<DefaultUBO>& uniformBuffer,
             const Texture& texture,
             const TextureSampler& textureSampler
         );

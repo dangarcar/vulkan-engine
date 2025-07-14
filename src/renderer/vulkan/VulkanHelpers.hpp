@@ -99,6 +99,15 @@ namespace fly {
         bool cubemap
     );
 
+    void copyImageToBuffer(
+        VkCommandBuffer commandBuffer,
+        VkImage image, 
+        uint32_t width, 
+        uint32_t height,
+        bool cubemap,
+        VkBuffer buffer 
+    );
+
     VkImageView createImageView(
         const VulkanInstance& vk,
         VkImage image, 

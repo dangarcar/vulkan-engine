@@ -3,7 +3,7 @@
 #include <Utils.hpp>
 
 #include <renderer/TGraphicsPipeline.hpp>
-#include <renderer/TUniformBuffer.hpp>
+#include <renderer/TBuffer.hpp>
 #include <renderer/TVertexArray.hpp>
 #include <renderer/Texture.hpp>
 
@@ -85,7 +85,7 @@ namespace fly {
         };
         struct TextureData {
             unsigned meshIdx;
-            std::unique_ptr<TUniformBuffer<UBO2D>> uniformBuffer;
+            std::unique_ptr<TBuffer<UBO2D>> uniformBuffer;
         };
         void destroyTextureData(TextureData&& data, uint32_t currentFrame);
 
@@ -100,7 +100,7 @@ namespace fly {
         std::unordered_map<TextureRef, std::vector<TextureData>> textureData;
 
         std::unordered_map<TextureRef, std::vector<TextureRender>> textureRenderQueue, oldTextureRenders;
-        std::vector<std::pair<uint32_t, std::unique_ptr<TUniformBuffer<UBO2D>>>> ubosToDestroy;
+        std::vector<std::pair<uint32_t, std::unique_ptr<TBuffer<UBO2D>>>> ubosToDestroy;
 
         const VulkanInstance& vk;
         glm::mat4 orthoProj;
@@ -125,7 +125,7 @@ namespace fly {
         void updateDescriptorSet(
             unsigned meshIndex,
 
-            const TUniformBuffer<UBO2D>& uniformBuffer,
+            const TBuffer<UBO2D>& uniformBuffer,
             const Texture& texture,
             const TextureSampler& textureSampler
         );

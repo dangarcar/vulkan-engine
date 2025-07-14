@@ -10,7 +10,7 @@ namespace fly {
 
         this->pipeline = engine.addPipeline<SkyboxPipeline>(true); //Render in the background
 
-        this->uniformBuffer = std::make_unique<TUniformBuffer<UBOSkybox>>(engine.getVulkanInstance());
+        this->uniformBuffer = std::make_unique<TBuffer<UBOSkybox>>(engine.getVulkanInstance(), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
         auto vertices = this->vertices;
         auto indices = this->indices;
@@ -23,13 +23,13 @@ namespace fly {
         ubo.projection = projection;
         ubo.view = view;
 
-        this->uniformBuffer->updateUBO(ubo, currentFrame);
+        this->uniformBuffer->updateBuffer(ubo, currentFrame);
     }
 
 
     //2D PIPELINE IMPLEMENTATION
     void SkyboxPipeline::updateDescriptorSet(
-        const TUniformBuffer<UBOSkybox>& uniformBuffer,
+        const TBuffer<UBOSkybox>& uniformBuffer,
         const Texture& texture,
         const TextureSampler& textureSampler
     ) {
