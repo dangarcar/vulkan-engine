@@ -40,4 +40,10 @@ namespace fly {
         std::vector<VkPresentModeKHR> presentModes;
     };
 
+    struct DescriptorSetLayout {
+        VkDescriptorSetLayout layout;
+        std::vector<VkDescriptorPoolSize> poolSizes;
+        uint32_t descriptorCount;
+    };
+
 }

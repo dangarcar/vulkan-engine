@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "vulkan/VulkanHelpers.hpp"
+#include "vulkan/Descriptors.hpp"
 #include "Texture.hpp"
 
 #include <vulkan/vulkan_core.h>
@@ -12,19 +13,19 @@ namespace fly {
     
     FilterPipeline::~FilterPipeline() {
         vkDestroyDescriptorPool(vk.device, this->descriptorPool, nullptr);
-        vkDestroyDescriptorSetLayout(vk.device, this->descriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(vk.device, this->descriptorSetLayout.layout, nullptr);
         vkDestroyPipeline(vk.device, this->pipeline, nullptr);
         vkDestroyPipelineLayout(vk.device, this->pipelineLayout, nullptr);
     }
 
     void FilterPipeline::allocate() {
-        this->descriptorPool = createDescriptorPool();
         this->descriptorSetLayout = createDescriptorSetLayout();
+        this->descriptorPool = createDescriptorPoolWithLayout(this->descriptorSetLayout, this->vk);
         
-        auto [pip, lay] = createComputePipeline(vk, this->descriptorSetLayout, getShaderCode(), 0);
+        auto [pip, lay] = createComputePipeline(vk, this->descriptorSetLayout.layout, getShaderCode(), 0);
         this->pipeline = pip;
         this->pipelineLayout = lay;
-        this->descriptorSets = allocateDescriptorSets(vk, this->descriptorSetLayout, this->descriptorPool);
+        this->descriptorSets = allocateDescriptorSets(vk, this->descriptorSetLayout.layout, this->descriptorPool);
 
         createResources();
     }
@@ -35,53 +36,11 @@ namespace fly {
         return readFile(GRAYSCALE_SHADER_SRC);
     }
 
-    VkDescriptorPool GrayscaleFilter::createDescriptorPool() {
-        std::array<VkDescriptorPoolSize, 2> poolSizes{};
-        poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        VkDescriptorPool descriptorPool;
-        if(vkCreateDescriptorPool(vk.device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute descriptor pool!");
-        }
-
-        return descriptorPool;
-    }
-
-    VkDescriptorSetLayout GrayscaleFilter::createDescriptorSetLayout() {
-        VkDescriptorSetLayoutBinding inputImageBinding{};
-        inputImageBinding.binding = 0;
-        inputImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        inputImageBinding.descriptorCount = 1;
-        inputImageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-        VkDescriptorSetLayoutBinding outputImageBinding{};
-        outputImageBinding.binding = 1;
-        outputImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        outputImageBinding.descriptorCount = 1;
-        outputImageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings = {inputImageBinding, outputImageBinding};
-        
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        VkDescriptorSetLayout descriptorSetLayout;
-        if(vkCreateDescriptorSetLayout(vk.device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute descriptor set layout!");
-        }
-
-        return descriptorSetLayout;
+    DescriptorSetLayout GrayscaleFilter::createDescriptorSetLayout() {
+        return newDescriptorSetBuild(MAX_FRAMES_IN_FLIGHT, {
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT}
+        }).build(vk);
     }
 
     void GrayscaleFilter::createResources() {
@@ -267,61 +226,12 @@ namespace fly {
         this->uniformBuffer->updateBuffer(ubo, currentFrame);
     }
 
-    VkDescriptorPool TonemapFilter::createDescriptorPool() {
-        std::array<VkDescriptorPoolSize, 3> poolSizes{};
-        poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        poolSizes[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        VkDescriptorPool descriptorPool;
-        if(vkCreateDescriptorPool(vk.device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute descriptor pool!");
-        }
-
-        return descriptorPool;
-    }
-
-    VkDescriptorSetLayout TonemapFilter::createDescriptorSetLayout() {
-        VkDescriptorSetLayoutBinding inputImageBinding{};
-        inputImageBinding.binding = 0;
-        inputImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        inputImageBinding.descriptorCount = 1;
-        inputImageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-        VkDescriptorSetLayoutBinding outputImageBinding{};
-        outputImageBinding.binding = 1;
-        outputImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        outputImageBinding.descriptorCount = 1;
-        outputImageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-        VkDescriptorSetLayoutBinding uniformBufferBinding{};
-        uniformBufferBinding.binding = 2;
-        uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uniformBufferBinding.descriptorCount = 1;
-        uniformBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-        std::array<VkDescriptorSetLayoutBinding, 3> bindings = {inputImageBinding, outputImageBinding,uniformBufferBinding};
-        
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        VkDescriptorSetLayout descriptorSetLayout;
-        if(vkCreateDescriptorSetLayout(vk.device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute descriptor set layout!");
-        }
-
-        return descriptorSetLayout;
+    DescriptorSetLayout TonemapFilter::createDescriptorSetLayout() {
+        return newDescriptorSetBuild(MAX_FRAMES_IN_FLIGHT, {
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
+        }).build(vk);
     }
 
     void TonemapFilter::createResources() {
@@ -532,24 +442,24 @@ namespace fly {
     }
 
     void BloomFilter::allocate() {
-        this->descriptorPool = createDescriptorPool();
         this->descriptorSetLayout = createDescriptorSetLayout();
+        this->descriptorPool = createDescriptorPoolWithLayout(this->descriptorSetLayout, this->vk);
         
         //DOWNSAMPLE
-        auto [dPip, dLay] = createComputePipeline(vk, this->descriptorSetLayout, getShaderCode(), sizeof(DownsamplePush));
+        auto [dPip, dLay] = createComputePipeline(vk, this->descriptorSetLayout.layout, getShaderCode(), sizeof(DownsamplePush));
         this->pipeline = dPip;
         this->pipelineLayout = dLay;
         
         //UPSAMPLE
-        auto [uPip, uLay] = createComputePipeline(vk, this->descriptorSetLayout, getUpsampleShaderCode(), sizeof(UpsamplePush));
+        auto [uPip, uLay] = createComputePipeline(vk, this->descriptorSetLayout.layout, getUpsampleShaderCode(), sizeof(UpsamplePush));
         this->upsamplePipeline = uPip;
         this->upsamplePipelineLayout = uLay;
         
         for(int i=1; i<BLOOM_LEVELS; ++i)
-            this->descriptorSetMap[{i-1, i}] = allocateDescriptorSets(vk, this->descriptorSetLayout, this->descriptorPool);
+            this->descriptorSetMap[{i-1, i}] = allocateDescriptorSets(vk, this->descriptorSetLayout.layout, this->descriptorPool);
         
         for(int i=BLOOM_LEVELS-1; i>0; --i)
-            this->descriptorSetMap[{i, i-1}] = allocateDescriptorSets(vk, this->descriptorSetLayout, this->descriptorPool);
+            this->descriptorSetMap[{i, i-1}] = allocateDescriptorSets(vk, this->descriptorSetLayout.layout, this->descriptorPool);
 
         createResources();
     }
@@ -586,53 +496,11 @@ namespace fly {
         }
     }
 
-    VkDescriptorPool BloomFilter::createDescriptorPool() {
-        std::array<VkDescriptorPoolSize, 2> poolSizes{};
-        poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2 * BLOOM_LEVELS;
-        poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2 * BLOOM_LEVELS;
-
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2 * BLOOM_LEVELS;
-
-        VkDescriptorPool descriptorPool;
-        if(vkCreateDescriptorPool(vk.device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute descriptor pool!");
-        }
-
-        return descriptorPool;
-    }
-
-    VkDescriptorSetLayout BloomFilter::createDescriptorSetLayout() {
-        VkDescriptorSetLayoutBinding inputSamplerBinding{};
-        inputSamplerBinding.binding = 0;
-        inputSamplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        inputSamplerBinding.descriptorCount = 1;
-        inputSamplerBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-        VkDescriptorSetLayoutBinding outputImageBinding{};
-        outputImageBinding.binding = 1;
-        outputImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        outputImageBinding.descriptorCount = 1;
-        outputImageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings = {inputSamplerBinding, outputImageBinding};
-        
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        VkDescriptorSetLayout descriptorSetLayout;
-        if(vkCreateDescriptorSetLayout(vk.device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create compute descriptor set layout!");
-        }
-
-        return descriptorSetLayout;
+    DescriptorSetLayout BloomFilter::createDescriptorSetLayout() {
+        return newDescriptorSetBuild(MAX_FRAMES_IN_FLIGHT * 2 * BLOOM_LEVELS, {
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT}
+        }).build(vk);
     }
 
     void BloomFilter::updateDescriptorSet(int inputLevel, int outputLevel) {

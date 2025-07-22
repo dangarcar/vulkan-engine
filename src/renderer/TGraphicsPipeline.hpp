@@ -58,7 +58,7 @@ namespace fly {
                 this->pendingDetach.pop();
             }
 
-            vkDestroyDescriptorSetLayout(vk.device, this->descriptorSetLayout, nullptr);
+            vkDestroyDescriptorSetLayout(vk.device, this->descriptorSetLayout.layout, nullptr);
             vkDestroyPipeline(vk.device, this->graphicsPipeline, nullptr);
             vkDestroyPipelineLayout(vk.device, this->pipelineLayout, nullptr);
         }
@@ -68,7 +68,7 @@ namespace fly {
             
             auto [pipeline, layout] = createGraphicsPipeline(
                 this->vk, this->getVertShaderCode(), this->getFragShaderCode(), 
-                renderPass, this->descriptorSetLayout, msaaSamples, this->depthTestEnabled
+                renderPass, this->descriptorSetLayout.layout, msaaSamples, this->depthTestEnabled
             );
             this->graphicsPipeline = pipeline;
             this->pipelineLayout = layout;
@@ -77,8 +77,8 @@ namespace fly {
         unsigned attachModel(std::unique_ptr<TVertexArray<Vertex_t>> vertexArray, int instanceCount = 1) {
             MeshData data;
             data.vertexArray = std::move(vertexArray);
-            data.descriptorPool = createDescriptorPool();
-            data.descriptorSets = allocateDescriptorSets(this->vk, this->descriptorSetLayout, data.descriptorPool);
+            data.descriptorPool = createDescriptorPoolWithLayout(this->descriptorSetLayout, this->vk);
+            data.descriptorSets = allocateDescriptorSets(this->vk, this->descriptorSetLayout.layout, data.descriptorPool);
             data.instanceCount = instanceCount;
     
             meshes[globalId] = std::move(data);
@@ -148,12 +148,10 @@ namespace fly {
         virtual std::vector<char> getVertShaderCode() = 0;
         virtual std::vector<char> getFragShaderCode() = 0;
 
-        virtual VkDescriptorPool createDescriptorPool() = 0;
-        virtual VkDescriptorSetLayout createDescriptorSetLayout() = 0;
-
+        virtual DescriptorSetLayout createDescriptorSetLayout() = 0;
     
     private:
-        VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+        DescriptorSetLayout descriptorSetLayout;
         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
         VkPipeline graphicsPipeline = VK_NULL_HANDLE;
     
@@ -176,7 +174,7 @@ namespace fly {
             vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
             vertShaderStageInfo.module = vertShaderModule;
             vertShaderStageInfo.pName = "main";
-        
+
             VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
             fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;

@@ -145,6 +145,10 @@ namespace fly {
         VkDescriptorPool descriptorPool
     );
 
+    VkDescriptorPool createDescriptorPoolWithLayout(DescriptorSetLayout layout, const VulkanInstance& vk);
+
+
+
     //INLINE DEFINITIONS
     inline VkFormat findDepthFormat(const VkPhysicalDevice physicalDevice) {
         return findSupportedFormat(

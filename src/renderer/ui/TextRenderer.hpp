@@ -114,16 +114,9 @@ namespace fly {
         );
 
     private:
-
-        std::vector<char> getVertShaderCode() override {
-            return readFile(VERT_TEXT_SHADER_SRC);
-        }
-        std::vector<char> getFragShaderCode() override {
-            return readFile(FRAG_TEXT_SHADER_SRC);
-        }
-
-        VkDescriptorSetLayout createDescriptorSetLayout() override;
-        VkDescriptorPool createDescriptorPool() override;
+        std::vector<char> getVertShaderCode() override { return readFile(VERT_TEXT_SHADER_SRC); }
+        std::vector<char> getFragShaderCode() override { return readFile(FRAG_TEXT_SHADER_SRC); }
+        DescriptorSetLayout createDescriptorSetLayout() override;
 
     };
 

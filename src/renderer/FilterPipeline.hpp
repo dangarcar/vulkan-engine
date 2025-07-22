@@ -3,10 +3,11 @@
 #include "TBuffer.hpp"
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanConstants.h"
+
+#include <glm/glm.hpp>
 #include <memory>
 #include <array>
 #include <map>
-#include <glm/glm.hpp>
 
 namespace fly {
 
@@ -25,12 +26,11 @@ namespace fly {
 
     protected:
         virtual std::vector<char> getShaderCode() = 0;
-        virtual VkDescriptorPool createDescriptorPool() = 0;
-        virtual VkDescriptorSetLayout createDescriptorSetLayout() = 0;
+        virtual DescriptorSetLayout createDescriptorSetLayout() = 0;
         
         const VulkanInstance& vk;
         std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> descriptorSets;
-        VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+        DescriptorSetLayout descriptorSetLayout;
         VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
         VkPipeline pipeline = VK_NULL_HANDLE;
@@ -51,8 +51,7 @@ namespace fly {
 
     protected:
         std::vector<char> getShaderCode() override;
-        VkDescriptorPool createDescriptorPool() override;
-        VkDescriptorSetLayout createDescriptorSetLayout() override;
+        DescriptorSetLayout createDescriptorSetLayout() override;
 
     };
 
@@ -77,8 +76,7 @@ namespace fly {
 
     protected:
         std::vector<char> getShaderCode() override;
-        VkDescriptorPool createDescriptorPool() override;
-        VkDescriptorSetLayout createDescriptorSetLayout() override;
+        DescriptorSetLayout createDescriptorSetLayout() override;
 
     };
 
@@ -113,8 +111,7 @@ namespace fly {
 
     protected:
         std::vector<char> getShaderCode() override;
-        VkDescriptorPool createDescriptorPool() override;
-        VkDescriptorSetLayout createDescriptorSetLayout() override;
+        DescriptorSetLayout createDescriptorSetLayout() override;
         
     private:
         std::vector<char> getUpsampleShaderCode();

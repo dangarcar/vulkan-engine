@@ -703,4 +703,19 @@ namespace fly {
         return descriptorSets;
     }
 
+    VkDescriptorPool createDescriptorPoolWithLayout(DescriptorSetLayout layout, const VulkanInstance& vk) {
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(layout.poolSizes.size());
+        poolInfo.pPoolSizes = layout.poolSizes.data();
+        poolInfo.maxSets = layout.poolSizes[0].descriptorCount;
+
+        VkDescriptorPool descriptorPool;
+        if(vkCreateDescriptorPool(vk.device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor pool!");
+        }
+
+        return descriptorPool;
+    }
+
 }
