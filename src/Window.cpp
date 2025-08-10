@@ -90,6 +90,7 @@ namespace fly {
         this->oldKeyStates = std::move(this->keyStates);        
         this->oldBtnPress = std::move(this->btnPress);
         this->oldScroll = scroll;
+        this->mouseConsumed = false;
 
         glfwPollEvents();
 

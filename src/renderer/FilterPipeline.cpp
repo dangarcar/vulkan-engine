@@ -1,7 +1,6 @@
 #include "FilterPipeline.hpp"
 
 #include <Utils.hpp>
-#include <cassert>
 
 #include "vulkan/VulkanHelpers.hpp"
 #include "vulkan/Descriptors.hpp"
@@ -93,7 +92,7 @@ namespace fly {
     }
 
     void GrayscaleFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, [[maybe_unused]] VkImage outputImage, uint32_t currentFrame) {
-        assert(inputImage == outputImage && "Input image is not equal to output image");
+        FLY_ASSERT(inputImage == outputImage, "Input image is not equal to output image");
         auto swapchainImage = inputImage;
 
         //swapchain image from color attach to transfer src
@@ -536,7 +535,7 @@ namespace fly {
     }
 
     void BloomFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, [[maybe_unused]] VkImage outputImage, uint32_t currentFrame) {
-        assert(inputImage == outputImage && "Input image is not equal to output image");
+        FLY_ASSERT(inputImage == outputImage && "Input image is not equal to output image");
         auto swapchainImage = inputImage;
 
         //swapchain image from color attach to transfer src

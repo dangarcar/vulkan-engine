@@ -3,8 +3,8 @@
 #include "vulkan/VulkanConstants.h"
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanHelpers.hpp"
+#include <Utils.hpp>
 
-#include <cassert>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -123,8 +123,8 @@ namespace fly {
         }
 
         void setInstanceCount(unsigned meshIndex, int instanceCount) {
-            assert(meshes.contains(meshIndex) && "Invalid mesh");
-            assert(instanceCount >= 0 && "Instance count must be greater than 0");
+            FLY_ASSERT(meshes.contains(meshIndex), "Invalid mesh");
+            FLY_ASSERT(instanceCount >= 0, "Instance count must be greater than 0");
 
             meshes[meshIndex].instanceCount = instanceCount;
         }

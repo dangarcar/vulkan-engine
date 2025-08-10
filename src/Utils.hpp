@@ -5,6 +5,27 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <format>
+
+#ifndef NDEBUG
+    inline void _assert_format() {} // Empty overload
+
+    template <typename... Args>
+    inline void _assert_format(const std::string& fmt, Args&&... args) {
+        std::cerr << '\n' << std::vformat(fmt, std::make_format_args(std::forward<Args>(args)...)) << '\n';
+    }
+
+    #define FLY_ASSERT(expr, ...) \
+        do { \
+            if(!(expr)) { \
+                std::cerr << std::format("Assertion failed: {}\n \tat {}:{}", #expr, __FILE__, __LINE__); \
+                _assert_format(__VA_ARGS__); \
+                std::abort(); \
+            } \
+        } while (0)
+#else
+    #define FLY_ASSERT(expr, ...) ((void)0)
+#endif
 
 namespace fly {
 

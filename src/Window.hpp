@@ -44,9 +44,12 @@ namespace fly {
         glm::vec2 getMousePos() const { return mousePos; }
         glm::vec2 getMouseDelta() const { return mousePos - oldMousePos; }
 
-        bool isMouseBtnPressed(MouseButton btn) const { return btnPress[static_cast<int>(btn)]; }
-        bool mouseClicked(MouseButton btn) const { return oldBtnPress[static_cast<int>(btn)] == false && btnPress[static_cast<int>(btn)] == true; }
-        bool mouseReleased(MouseButton btn) const { return oldBtnPress[static_cast<int>(btn)] == true && btnPress[static_cast<int>(btn)] == false; }
+        bool isMouseBtnPressed(MouseButton btn) const { return !mouseConsumed && btnPress[int(btn)]; }
+        bool mouseClicked(MouseButton btn) const { return !mouseConsumed && oldBtnPress[int(btn)] == false && btnPress[int(btn)] == true; }
+        bool mouseReleased(MouseButton btn) const { return !mouseConsumed && oldBtnPress[int(btn)] == true && btnPress[int(btn)] == false; }
+
+        void consumeMouse() { mouseConsumed = true; }
+        bool isMouseConsumed() const { return mouseConsumed; }
 
         float getScroll() const { return scroll - oldScroll; }
 
@@ -64,6 +67,7 @@ namespace fly {
         glm::vec2 oldMousePos, mousePos;
         float oldScroll = 0, scroll = 0;
 
+        bool mouseConsumed = false;
         std::bitset<3> btnPress = false, oldBtnPress = false;
 
         static void framebufferResizeCallback(GLFWwindow* glfwWindow, int width, int height);

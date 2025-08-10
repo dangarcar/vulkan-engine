@@ -30,7 +30,7 @@ namespace fly {
         const Texture& texture,
         const TextureSampler& textureSampler
     ) {
-        assert(this->meshes[meshIndex].descriptorSets.size() == MAX_FRAMES_IN_FLIGHT && "Descriptor set vector bad size!");
+        FLY_ASSERT(this->meshes[meshIndex].descriptorSets.size() == MAX_FRAMES_IN_FLIGHT, "Descriptor set vector bad size!");
 
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
             VkDescriptorBufferInfo bufferInfo{};

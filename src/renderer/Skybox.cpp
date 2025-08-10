@@ -7,7 +7,7 @@ namespace fly {
 
     //SKYBOX IMPLEMENTATION
     Skybox::Skybox(Engine& engine, std::unique_ptr<Texture> cubemap, std::unique_ptr<TextureSampler> cubemapSampler): cubemapSampler(std::move(cubemapSampler)),cubemap(std::move(cubemap)) {
-        assert(this->cubemap->isCubemap());
+        FLY_ASSERT(this->cubemap->isCubemap(), "Skybox texture must be a cubemap!");
 
         this->pipeline = engine.addPipeline<SkyboxPipeline>(true); //Render in the background
 
@@ -34,7 +34,7 @@ namespace fly {
         const Texture& texture,
         const TextureSampler& textureSampler
     ) {
-        assert(this->meshes[0].descriptorSets.size() == MAX_FRAMES_IN_FLIGHT && "Descriptor set vector bad size!");
+        FLY_ASSERT(this->meshes[0].descriptorSets.size() == MAX_FRAMES_IN_FLIGHT, "Descriptor set vector bad size!");
 
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
             VkDescriptorBufferInfo bufferInfo{};
