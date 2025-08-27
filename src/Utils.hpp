@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <format>
+#include <glm/glm.hpp>
 
 #ifndef NDEBUG
     inline void _assert_format() {} // Empty overload
@@ -28,6 +29,22 @@
 #endif
 
 namespace fly {
+
+    namespace print {
+
+        // Overload operator << for glm::vec
+        template <glm::length_t L, typename T, glm::qualifier Q>
+        std::ostream& operator<<(std::ostream& os, const glm::vec<L, T, Q>& v) {
+            os << "(";
+            for (glm::length_t i = 0; i < L; i++) {
+                os << v[i];
+                if (i < L - 1) os << ", ";
+            }
+            os << ")";
+            return os;
+        }
+
+    }
 
     class Timer {
     public:

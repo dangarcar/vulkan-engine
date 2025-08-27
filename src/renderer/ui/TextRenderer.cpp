@@ -69,9 +69,11 @@ namespace fly {
             return;
         }
 
-        auto& font = this->fonts.at(fontName);        
+        auto& font = this->fonts.at(fontName);                
         std::vector<float> advances = {0};
         for(auto c: str) {
+            FLY_ASSERT(font.fontChars.contains(c), "{} doesn't contain character '{}' in its files", fontName, c);
+
             if(c == '\n')
                 advances.push_back(0);
             else
