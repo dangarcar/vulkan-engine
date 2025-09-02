@@ -32,6 +32,7 @@ namespace fly {
         
         template<typename T, typename ...Args>
         void setScene(Args&&... args) {
+            ScopeTimer t("Scene loading time");
             static_assert(std::is_base_of<Scene, T>::value);
             this->scene = std::make_unique<T>(std::forward(args)...);
             this->scene->init(*this);
@@ -74,14 +75,14 @@ namespace fly {
 
         Window& getWindow() { return this->window; }
         const Window& getWindow() const { return this->window; }
-        const VulkanInstance& getVulkanInstance() const { return this->vk; } 
+        std::shared_ptr<VulkanInstance> getVulkanInstance() const { return this->vk; } 
         VkCommandPool getCommandPool() const { return this->commandPool; }
         UIRenderer& getUIRenderer() { return *this->uiRenderer; }
 
     private:
         std::unique_ptr<Scene> scene;
 
-        VulkanInstance vk;
+        std::shared_ptr<VulkanInstance> vk;
         VkCommandPool commandPool;
 
         Window window;

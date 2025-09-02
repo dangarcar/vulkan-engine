@@ -36,7 +36,7 @@ namespace fly {
     template<typename Vertex_t>
     class TGraphicsPipeline : public IGraphicsPipeline {
     public:
-        TGraphicsPipeline(const VulkanInstance& vk, bool depthTest): depthTestEnabled(depthTest), vk{vk} {}
+        TGraphicsPipeline(std::shared_ptr<VulkanInstance> vk, bool depthTest): depthTestEnabled(depthTest), vk{vk} {}
         virtual ~TGraphicsPipeline() {
             std::vector<unsigned> keys;
             keys.reserve(this->meshes.size());
@@ -53,14 +53,14 @@ namespace fly {
 
             while(!this->pendingDetach.empty()) {
                 ModelDetachInfo& info = this->pendingDetach.front();
-                vkDestroyDescriptorPool(vk.device, info.data.descriptorPool, nullptr);
+                vkDestroyDescriptorPool(vk->device, info.data.descriptorPool, nullptr);
                 info.data.vertexArray.reset();
                 this->pendingDetach.pop();
             }
 
-            vkDestroyDescriptorSetLayout(vk.device, this->descriptorSetLayout.layout, nullptr);
-            vkDestroyPipeline(vk.device, this->graphicsPipeline, nullptr);
-            vkDestroyPipelineLayout(vk.device, this->pipelineLayout, nullptr);
+            vkDestroyDescriptorSetLayout(vk->device, this->descriptorSetLayout.layout, nullptr);
+            vkDestroyPipeline(vk->device, this->graphicsPipeline, nullptr);
+            vkDestroyPipelineLayout(vk->device, this->pipelineLayout, nullptr);
         }
 
         void allocate(const VkRenderPass renderPass, const VkSampleCountFlagBits msaaSamples) override {
@@ -91,7 +91,7 @@ namespace fly {
                 if(info.currentFrame != currentFrame)
                     break;
 
-                vkDestroyDescriptorPool(vk.device, info.data.descriptorPool, nullptr);
+                vkDestroyDescriptorPool(vk->device, info.data.descriptorPool, nullptr);
                 info.data.vertexArray.reset();
                 this->pendingDetach.pop();
             }
@@ -140,7 +140,7 @@ namespace fly {
 
         unsigned globalId = 0;
         std::unordered_map<unsigned, MeshData> meshes;
-        const VulkanInstance& vk;
+        std::shared_ptr<VulkanInstance> vk;
 
         struct ModelDetachInfo { MeshData data; uint32_t currentFrame; };
         std::queue<ModelDetachInfo> pendingDetach;
@@ -157,7 +157,7 @@ namespace fly {
     
     private:
         static std::pair<VkPipeline, VkPipelineLayout> createGraphicsPipeline(
-            const VulkanInstance& vk, 
+            std::shared_ptr<VulkanInstance> vk, 
             std::vector<char> vertShaderCode, 
             std::vector<char> fragShaderCode,
 
@@ -166,8 +166,8 @@ namespace fly {
             VkSampleCountFlagBits msaaSamples,
             bool depthTestEnabled
         ) {
-            VkShaderModule vertShaderModule = createShaderModule(vk.device, vertShaderCode);
-            VkShaderModule fragShaderModule = createShaderModule(vk.device, fragShaderCode);
+            VkShaderModule vertShaderModule = createShaderModule(vk->device, vertShaderCode);
+            VkShaderModule fragShaderModule = createShaderModule(vk->device, fragShaderCode);
         
             VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
             vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -284,7 +284,7 @@ namespace fly {
             pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
         
             VkPipelineLayout pipelineLayout;
-            if (vkCreatePipelineLayout(vk.device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+            if (vkCreatePipelineLayout(vk->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create pipeline layout!");
             }
         
@@ -312,13 +312,13 @@ namespace fly {
             pipelineInfo.basePipelineIndex = -1; // Optional
         
             VkPipeline graphicsPipeline;
-            if (vkCreateGraphicsPipelines(vk.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+            if (vkCreateGraphicsPipelines(vk->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create graphics pipeline!");
             }
         
         
-            vkDestroyShaderModule(vk.device, fragShaderModule, nullptr);
-            vkDestroyShaderModule(vk.device, vertShaderModule, nullptr);
+            vkDestroyShaderModule(vk->device, fragShaderModule, nullptr);
+            vkDestroyShaderModule(vk->device, vertShaderModule, nullptr);
         
             return std::make_pair(graphicsPipeline, pipelineLayout);
         } 

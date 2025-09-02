@@ -16,14 +16,14 @@ namespace fly {
         std::array<VkDescriptorSetLayoutBinding, N> bindings{};
         uint32_t descriptorCount;
         
-        DescriptorSetLayout build(const VulkanInstance& vk) {
+        DescriptorSetLayout build(std::shared_ptr<VulkanInstance> vk) {
             DescriptorSetLayout layout;
 
             VkDescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
             layoutInfo.bindingCount = static_cast<uint32_t>(this->bindings.size());
             layoutInfo.pBindings = this->bindings.data();
-            if(vkCreateDescriptorSetLayout(vk.device, &layoutInfo, nullptr, &layout.layout) != VK_SUCCESS)
+            if(vkCreateDescriptorSetLayout(vk->device, &layoutInfo, nullptr, &layout.layout) != VK_SUCCESS)
                 throw std::runtime_error("failed to create descriptor set layout!");
 
             layout.descriptorCount = this->descriptorCount;

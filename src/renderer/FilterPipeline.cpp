@@ -11,10 +11,10 @@
 namespace fly {
     
     FilterPipeline::~FilterPipeline() {
-        vkDestroyDescriptorPool(vk.device, this->descriptorPool, nullptr);
-        vkDestroyDescriptorSetLayout(vk.device, this->descriptorSetLayout.layout, nullptr);
-        vkDestroyPipeline(vk.device, this->pipeline, nullptr);
-        vkDestroyPipelineLayout(vk.device, this->pipelineLayout, nullptr);
+        vkDestroyDescriptorPool(vk->device, this->descriptorPool, nullptr);
+        vkDestroyDescriptorSetLayout(vk->device, this->descriptorSetLayout.layout, nullptr);
+        vkDestroyPipeline(vk->device, this->pipeline, nullptr);
+        vkDestroyPipelineLayout(vk->device, this->pipelineLayout, nullptr);
     }
 
     void FilterPipeline::allocate() {
@@ -45,7 +45,7 @@ namespace fly {
     void GrayscaleFilter::createResources() {
         this->computeInputImage = std::make_unique<Texture>(
             this->vk, 
-            vk.swapChainExtent.width, vk.swapChainExtent.height, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
             VK_FORMAT_R16G16B16A16_SFLOAT, 
             VK_SAMPLE_COUNT_1_BIT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -54,7 +54,7 @@ namespace fly {
 
         this->computeOutputImage = std::make_unique<Texture>(
             this->vk, 
-            vk.swapChainExtent.width, vk.swapChainExtent.height, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
             VK_FORMAT_R16G16B16A16_SFLOAT, 
             VK_SAMPLE_COUNT_1_BIT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -87,7 +87,7 @@ namespace fly {
             descriptorWrites[1].descriptorCount = 1;
             descriptorWrites[1].pImageInfo = &outputImageInfo;
 
-            vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -123,7 +123,7 @@ namespace fly {
         VkImageCopy copyRegion{};
         copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.extent = {vk.swapChainExtent.width, vk.swapChainExtent.height, 1};
+        copyRegion.extent = {vk->swapChainExtent.width, vk->swapChainExtent.height, 1};
 
         vkCmdCopyImage(
             commandBuffer,
@@ -167,8 +167,8 @@ namespace fly {
             0, 
             nullptr
         );
-        uint32_t groupCountX = (vk.swapChainExtent.width + 15) / 16;
-        uint32_t groupCountY = (vk.swapChainExtent.height + 15) / 16;
+        uint32_t groupCountX = (vk->swapChainExtent.width + 15) / 16;
+        uint32_t groupCountY = (vk->swapChainExtent.height + 15) / 16;
         vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
 
         //compute output image from general to transfer src
@@ -236,7 +236,7 @@ namespace fly {
     void TonemapFilter::createResources() {
         this->computeInputImage = std::make_unique<Texture>(
             this->vk, 
-            vk.swapChainExtent.width, vk.swapChainExtent.height, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
             VK_FORMAT_R16G16B16A16_SFLOAT, 
             VK_SAMPLE_COUNT_1_BIT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -245,7 +245,7 @@ namespace fly {
 
         this->computeOutputImage = std::make_unique<Texture>(
             this->vk, 
-            vk.swapChainExtent.width, vk.swapChainExtent.height, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
             VK_FORMAT_R8G8B8A8_UNORM, 
             VK_SAMPLE_COUNT_1_BIT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -294,7 +294,7 @@ namespace fly {
             descriptorWrites[2].descriptorCount = 1;
             descriptorWrites[2].pBufferInfo = &bufferInfo;
 
-            vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -327,7 +327,7 @@ namespace fly {
         VkImageCopy copyRegion{};
         copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.extent = {vk.swapChainExtent.width, vk.swapChainExtent.height, 1};
+        copyRegion.extent = {vk->swapChainExtent.width, vk->swapChainExtent.height, 1};
 
         vkCmdCopyImage(
             commandBuffer,
@@ -371,8 +371,8 @@ namespace fly {
             0, 
             nullptr
         );
-        uint32_t groupCountX = (vk.swapChainExtent.width + 15) / 16;
-        uint32_t groupCountY = (vk.swapChainExtent.height + 15) / 16;
+        uint32_t groupCountX = (vk->swapChainExtent.width + 15) / 16;
+        uint32_t groupCountY = (vk->swapChainExtent.height + 15) / 16;
         vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
 
         //compute output image from general to transfer src
@@ -428,8 +428,8 @@ namespace fly {
         for(auto& i: computeImages)
             i.reset();
 
-        vkDestroyPipeline(vk.device, this->upsamplePipeline, nullptr);
-        vkDestroyPipelineLayout(vk.device, this->upsamplePipelineLayout, nullptr);
+        vkDestroyPipeline(vk->device, this->upsamplePipeline, nullptr);
+        vkDestroyPipelineLayout(vk->device, this->upsamplePipelineLayout, nullptr);
     }
 
     std::vector<char> BloomFilter::getShaderCode() {
@@ -464,7 +464,7 @@ namespace fly {
     }
 
     void BloomFilter::createResources() {
-        int width = vk.swapChainExtent.width, height = vk.swapChainExtent.height;
+        int width = vk->swapChainExtent.width, height = vk->swapChainExtent.height;
         for(int i=0; i<BLOOM_LEVELS; ++i) {
             auto usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
             if(i == 0)
@@ -530,7 +530,7 @@ namespace fly {
             descriptorWrites[1].descriptorCount = 1;
             descriptorWrites[1].pImageInfo = &outputImageInfo;
 
-            vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -566,7 +566,7 @@ namespace fly {
         VkImageCopy copyRegion{};
         copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.extent = {vk.swapChainExtent.width, vk.swapChainExtent.height, 1};
+        copyRegion.extent = {vk->swapChainExtent.width, vk->swapChainExtent.height, 1};
 
         vkCmdCopyImage(
             commandBuffer,

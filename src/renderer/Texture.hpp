@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 
 #include "vulkan/VulkanTypes.h"
 
@@ -32,7 +33,7 @@ namespace fly {
     public:
         //Texture creator for generic purposes, like depth textures 
         Texture(
-            const VulkanInstance& vk, 
+            std::shared_ptr<VulkanInstance> vk, 
             uint32_t width, uint32_t height, 
             VkFormat format, 
             VkSampleCountFlagBits numSamples,
@@ -40,11 +41,11 @@ namespace fly {
             VkImageAspectFlags aspectFlags
         );
         //Texture obtained from the path given in png, jpeg or bmp
-        Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format);
+        Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format);
         //Ktx texture in bc7 with mipmaps included, they aren't generated
-        Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path ktxPath);
+        Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path ktxPath);
         //Default 2x2 magenta and black texture ready to be sampled
-        Texture(const VulkanInstance& vk, const VkCommandPool commandPool);
+        Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool);
         
 
         ~Texture();
@@ -68,12 +69,12 @@ namespace fly {
         uint32_t width, height;
         VkFormat format;
 
-        const VulkanInstance& vk;
+        std::shared_ptr<VulkanInstance> vk;
         bool cubemap = false;
         
     private:
-        void _createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize);
-        void _createTextureFromKtx2(const VulkanInstance& vk, const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions);
+        void _createTextureFromPixels(const VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize);
+        void _createTextureFromKtx2(const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions);
         
     };
 
@@ -82,7 +83,7 @@ namespace fly {
     public:
         enum class Filter { LINEAR, NEAREST };
 
-        TextureSampler(const VulkanInstance& vk, uint32_t mipLevels, Filter filter = Filter::LINEAR);
+        TextureSampler(std::shared_ptr<VulkanInstance> vk, uint32_t mipLevels, Filter filter = Filter::LINEAR);
         ~TextureSampler();
 
         VkSampler getSampler() const { return textureSampler; }
@@ -90,7 +91,7 @@ namespace fly {
     private:
         VkSampler textureSampler;
 
-        const VulkanInstance& vk;
+        std::shared_ptr<VulkanInstance> vk;
     };
 
 }

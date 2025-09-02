@@ -10,7 +10,7 @@ namespace fly {
     template<typename T>
     class TBuffer {
     public:
-        TBuffer(const VulkanInstance& vk, VkBufferUsageFlagBits usage): vk{vk} {
+        TBuffer(std::shared_ptr<VulkanInstance> vk, VkBufferUsageFlagBits usage): vk{vk} {
             VkDeviceSize bufferSize = sizeof(T);
 
             for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -23,14 +23,14 @@ namespace fly {
                     this->buffersMemory[i]
                 );
     
-                vkMapMemory(vk.device, this->buffersMemory[i], 0, bufferSize, 0, &this->buffersMapped[i]);
+                vkMapMemory(vk->device, this->buffersMemory[i], 0, bufferSize, 0, &this->buffersMapped[i]);
             }
         }
 
         ~TBuffer() {
             for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-                vkDestroyBuffer(vk.device, this->buffers[i], nullptr);
-                vkFreeMemory(vk.device, this->buffersMemory[i], nullptr);
+                vkDestroyBuffer(vk->device, this->buffers[i], nullptr);
+                vkFreeMemory(vk->device, this->buffersMemory[i], nullptr);
             }
         }
 
@@ -54,7 +54,7 @@ namespace fly {
         std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> buffersMemory;
         std::array<void*, MAX_FRAMES_IN_FLIGHT> buffersMapped;
     
-        const VulkanInstance& vk;
+        std::shared_ptr<VulkanInstance> vk;
 
     };
 

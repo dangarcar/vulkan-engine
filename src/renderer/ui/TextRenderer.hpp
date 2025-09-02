@@ -49,7 +49,7 @@ namespace fly {
     public:
         static int const MAX_CHARS = 32768;
     public:
-        TextRenderer(const VulkanInstance& vk);
+        TextRenderer(std::shared_ptr<VulkanInstance> vk);
         ~TextRenderer();
 
         void resize(int width, int height);
@@ -86,7 +86,7 @@ namespace fly {
         std::unique_ptr<TextPipeline> pipeline;
         glm::mat4 orthoProj;
 
-        const VulkanInstance& vk;
+        std::shared_ptr<VulkanInstance> vk;
 
         const std::vector<Vertex2D> vertices = {
             {{0.0f, 0.0f}},
@@ -102,7 +102,7 @@ namespace fly {
 
     class TextPipeline: public TGraphicsPipeline<Vertex2D> {
     public:
-        TextPipeline(const VulkanInstance& vk): TGraphicsPipeline{vk, false} {}
+        TextPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, false} {}
         ~TextPipeline() = default;
 
         void updateDescriptorSet(

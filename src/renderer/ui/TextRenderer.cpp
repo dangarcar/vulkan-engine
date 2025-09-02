@@ -15,8 +15,8 @@
 
 namespace fly {
 
-    TextRenderer::TextRenderer(const VulkanInstance& vk): vk{vk} {
-        this->orthoProj = glm::ortho(0.0f, (float)vk.swapChainExtent.width, 0.0f, (float)vk.swapChainExtent.height);
+    TextRenderer::TextRenderer(std::shared_ptr<VulkanInstance> vk): vk{vk} {
+        this->orthoProj = glm::ortho(0.0f, (float)vk->swapChainExtent.width, 0.0f, (float)vk->swapChainExtent.height);
     }
 
     TextRenderer::~TextRenderer() {
@@ -25,8 +25,8 @@ namespace fly {
             f.texture.reset();
 
             for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-                vkDestroyBuffer(vk.device, f.buffers[i], nullptr);
-                vkFreeMemory(vk.device, f.buffersMemory[i], nullptr);
+                vkDestroyBuffer(vk->device, f.buffers[i], nullptr);
+                vkFreeMemory(vk->device, f.buffersMemory[i], nullptr);
             }
         }
     }
@@ -187,7 +187,7 @@ namespace fly {
                 font.buffersMemory[i]
             );
 
-            vkMapMemory(vk.device, font.buffersMemory[i], 0, bufferSize, 0, &font.buffersMapped[i]);
+            vkMapMemory(vk->device, font.buffersMemory[i], 0, bufferSize, 0, &font.buffersMapped[i]);
         }
 
         this->pipeline->updateDescriptorSet(
@@ -245,7 +245,7 @@ namespace fly {
             descriptorWrites[1].descriptorCount = 1;
             descriptorWrites[1].pImageInfo = &imageInfo;
 
-            vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 

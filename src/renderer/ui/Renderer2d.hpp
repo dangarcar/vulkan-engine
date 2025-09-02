@@ -37,7 +37,7 @@ namespace fly {
 
     class Renderer2d {
     public:
-        Renderer2d(const VulkanInstance& vk);
+        Renderer2d(std::shared_ptr<VulkanInstance> vk);
     
         void resize(int width, int height);
 
@@ -102,7 +102,7 @@ namespace fly {
         std::unordered_map<TextureRef, std::vector<TextureRender>> textureRenderQueue, oldTextureRenders;
         std::vector<std::pair<uint32_t, std::unique_ptr<TBuffer<UBO2D>>>> ubosToDestroy;
 
-        const VulkanInstance& vk;
+        std::shared_ptr<VulkanInstance> vk;
         glm::mat4 orthoProj;
 
         const std::vector<Vertex2D> vertices = {
@@ -119,7 +119,7 @@ namespace fly {
 
     class GPipeline2D: public TGraphicsPipeline<Vertex2D> {
     public:
-        GPipeline2D(const VulkanInstance& vk): TGraphicsPipeline{vk, false} {}
+        GPipeline2D(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, false} {}
         ~GPipeline2D() = default;
     
         void updateDescriptorSet(

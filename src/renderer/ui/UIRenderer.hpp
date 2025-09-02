@@ -10,7 +10,7 @@ namespace fly {
     class UIRenderer {
     public:
 
-        UIRenderer(GLFWwindow* window, const VulkanInstance& vk);
+        UIRenderer(GLFWwindow* window, std::shared_ptr<VulkanInstance> vk);
         ~UIRenderer();
         
         void renderTexture(
@@ -73,11 +73,10 @@ namespace fly {
         std::vector<VkCommandBuffer> uiCommandBuffers;
         std::vector<VkSemaphore> uiRenderFinishedSemaphores;
         
-        const VulkanInstance& vk;
+        std::shared_ptr<VulkanInstance> vk;
         
         Renderer2d renderer2d;
         TextRenderer textRenderer;
-        
         
     private:    
         void initImgui(GLFWwindow* window);

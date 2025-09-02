@@ -53,13 +53,13 @@ namespace fly {
         }
         void reset() { this->start = std::chrono::steady_clock::now(); }
 
-        double elapsed() const {
+        double elapsedSeconds() const {
             std::chrono::duration<double> dt = std::chrono::steady_clock::now() - start;
             return dt.count();
         }
 
         void printElapsed() const {
-            std::cout << label << ": " << this->elapsed() * 1000 << "ms\n";
+            std::cout << label << ": " << this->elapsedSeconds() * 1000 << "ms\n";
         }
 
     private:

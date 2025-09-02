@@ -27,10 +27,13 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
 namespace fly {
 
     void Engine::init() {
+        ScopeTimer t("Engine loading time");
+
+        this->vk = std::make_shared<VulkanInstance>();
         createInstance();
         setupDebugMessenger();
 
-        vk.surface = this->window.createSurface(vk.instance);
+        vk->surface = this->window.createSurface(vk->instance);
 
         pickPhysicalDevice();
         createLogicalDevice();
@@ -44,8 +47,8 @@ namespace fly {
         createColorAndDepthTextures();
         createFramebuffers();
         
-        this->commandBuffers = createCommandBuffers(vk.device, MAX_FRAMES_IN_FLIGHT, this->commandPool);
-        this->computeCommandBuffers = createCommandBuffers(vk.device, MAX_FRAMES_IN_FLIGHT, this->commandPool);
+        this->commandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->commandPool);
+        this->computeCommandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->commandPool);
         createSyncObjects();
 
         uiRenderer = std::make_unique<UIRenderer>(this->window.getGlfwWindow(), this->vk);
@@ -95,7 +98,7 @@ namespace fly {
     }
 
     Engine::~Engine() {
-        vkDeviceWaitIdle(vk.device);
+        vkDeviceWaitIdle(vk->device);
 
         scene.reset();
         uiRenderer.reset();
@@ -121,10 +124,10 @@ namespace fly {
     }
 
     void Engine::drawFrame() {
-        vkWaitForFences(vk.device, 1, &this->inFlightFences[this->currentFrame], VK_TRUE, UINT64_MAX);
+        vkWaitForFences(vk->device, 1, &this->inFlightFences[this->currentFrame], VK_TRUE, UINT64_MAX);
         
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(vk.device, vk.swapChain, UINT64_MAX, this->imageAvailableSemaphores[this->currentFrame], VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(vk->device, vk->swapChain, UINT64_MAX, this->imageAvailableSemaphores[this->currentFrame], VK_NULL_HANDLE, &imageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
             recreateSwapChain();
             return;
@@ -133,17 +136,17 @@ namespace fly {
         }
         
         // Only reset the fence if we are submitting work
-        vkResetFences(vk.device, 1, &this->inFlightFences[this->currentFrame]);
+        vkResetFences(vk->device, 1, &this->inFlightFences[this->currentFrame]);
 
         vkResetCommandBuffer(this->commandBuffers[this->currentFrame], 0);
         this->recordCommandBuffer(this->commandBuffers[this->currentFrame], imageIndex);
         
         vkResetCommandBuffer(this->computeCommandBuffers[this->currentFrame], 0);
-        applyFilters(this->computeCommandBuffers[this->currentFrame], vk.swapChainImages[imageIndex]);
+        applyFilters(this->computeCommandBuffers[this->currentFrame], vk->swapChainImages[imageIndex]);
         
         vkResetCommandBuffer(uiRenderer->getCommandBuffer(this->currentFrame), 0);
         uiRenderer->recordCommandBuffer(imageIndex, this->currentFrame);
-        
+
         
         std::array<VkSubmitInfo, 3> submitInfos = {};
         // Graphics pass
@@ -181,7 +184,7 @@ namespace fly {
         auto uiSemaphore = uiRenderer->getRenderFinishedSemaphore(this->currentFrame);
         submitInfos[2].pSignalSemaphores = &uiSemaphore;
 
-        if(vkQueueSubmit(vk.graphicsQueue, submitInfos.size(), submitInfos.data(), this->inFlightFences[this->currentFrame]) != VK_SUCCESS) {
+        if(vkQueueSubmit(vk->graphicsQueue, submitInfos.size(), submitInfos.data(), this->inFlightFences[this->currentFrame]) != VK_SUCCESS) {
             throw std::runtime_error("failed to submit draw command buffer!");
         }
 
@@ -192,12 +195,12 @@ namespace fly {
         auto imguiRenderFinishedSemaphore = uiRenderer->getRenderFinishedSemaphore(this->currentFrame);
         presentInfo.pWaitSemaphores = &imguiRenderFinishedSemaphore;
         
-        VkSwapchainKHR swapChains[] = {vk.swapChain};
+        VkSwapchainKHR swapChains[] = {vk->swapChain};
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
 
-        result = vkQueuePresentKHR(vk.presentQueue, &presentInfo);
+        result = vkQueuePresentKHR(vk->presentQueue, &presentInfo);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || this->window.isFramebufferResized()) {
             this->window.resizeFramebuffer();
             recreateSwapChain();
@@ -209,7 +212,7 @@ namespace fly {
     }
 
     void Engine::recreateSwapChain() {
-        vkDeviceWaitIdle(vk.device);
+        vkDeviceWaitIdle(vk->device);
     
         uiRenderer->cleanupSwapchain();
         cleanupSwapChain();
@@ -231,14 +234,14 @@ namespace fly {
         depthTexture.reset();
 
         for(auto framebuffer : this->swapChainFramebuffers) {
-            vkDestroyFramebuffer(vk.device, framebuffer, nullptr);
+            vkDestroyFramebuffer(vk->device, framebuffer, nullptr);
         }
 
-        for(auto imageView : vk.swapChainImageViews) {
-            vkDestroyImageView(vk.device, imageView, nullptr);
+        for(auto imageView : vk->swapChainImageViews) {
+            vkDestroyImageView(vk->device, imageView, nullptr);
         }
 
-        vkDestroySwapchainKHR(vk.device, vk.swapChain, nullptr);
+        vkDestroySwapchainKHR(vk->device, vk->swapChain, nullptr);
     }
 
     void Engine::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
@@ -257,7 +260,7 @@ namespace fly {
         renderPassInfo.framebuffer = this->swapChainFramebuffers[imageIndex];
 
         renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = vk.swapChainExtent;
+        renderPassInfo.renderArea.extent = vk->swapChainExtent;
 
         std::array<VkClearValue, 2> clearValues{};
         clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
@@ -270,15 +273,15 @@ namespace fly {
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
-        viewport.width = static_cast<float>(vk.swapChainExtent.width);
-        viewport.height = static_cast<float>(vk.swapChainExtent.height);
+        viewport.width = static_cast<float>(vk->swapChainExtent.width);
+        viewport.height = static_cast<float>(vk->swapChainExtent.height);
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
         VkRect2D scissor{};
         scissor.offset = {0, 0};
-        scissor.extent = vk.swapChainExtent;
+        scissor.extent = vk->swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
         
         for(auto& pipeline: this->graphicPipelines)
@@ -297,25 +300,25 @@ namespace fly {
         graphicPipelines.clear();
         filters.clear();
 
-        vkDestroyRenderPass(vk.device, this->renderPass, nullptr);
+        vkDestroyRenderPass(vk->device, this->renderPass, nullptr);
 
         for (int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            vkDestroySemaphore(vk.device, this->renderPassFinishedSemaphores[i], nullptr);
-            vkDestroySemaphore(vk.device, this->computePassFinishedSemaphores[i], nullptr);
-            vkDestroySemaphore(vk.device, this->imageAvailableSemaphores[i], nullptr);
-            vkDestroyFence(vk.device, this->inFlightFences[i], nullptr);
+            vkDestroySemaphore(vk->device, this->renderPassFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(vk->device, this->computePassFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(vk->device, this->imageAvailableSemaphores[i], nullptr);
+            vkDestroyFence(vk->device, this->inFlightFences[i], nullptr);
         }
         
-        vkDestroyCommandPool(vk.device, this->commandPool, nullptr);
+        vkDestroyCommandPool(vk->device, this->commandPool, nullptr);
 
-        vkDestroyDevice(vk.device, nullptr);
+        vkDestroyDevice(vk->device, nullptr);
 
         if (enableValidationLayers) {
-            DestroyDebugUtilsMessengerEXT(vk.instance, this->debugMessenger, nullptr);
+            DestroyDebugUtilsMessengerEXT(vk->instance, this->debugMessenger, nullptr);
         }
 
-        vkDestroySurfaceKHR(vk.instance, vk.surface, nullptr);
-        vkDestroyInstance(vk.instance, nullptr);
+        vkDestroySurfaceKHR(vk->instance, vk->surface, nullptr);
+        vkDestroyInstance(vk->instance, nullptr);
     }
 
 
@@ -341,7 +344,7 @@ namespace fly {
         createInfo.ppEnabledExtensionNames = extensions.data();
 
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-        if (enableValidationLayers) {
+        if(enableValidationLayers) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
 
@@ -353,7 +356,7 @@ namespace fly {
             createInfo.pNext = nullptr;
         }
 
-        if (vkCreateInstance(&createInfo, nullptr, &vk.instance) != VK_SUCCESS) {
+        if(vkCreateInstance(&createInfo, nullptr, &vk->instance) != VK_SUCCESS) {
             throw std::runtime_error("failed to create instance!");
         }
     }
@@ -381,48 +384,53 @@ namespace fly {
         VkDebugUtilsMessengerCreateInfoEXT createInfo;
         populateDebugMessengerCreateInfo(createInfo);
 
-        if (CreateDebugUtilsMessengerEXT(vk.instance, &createInfo, nullptr, &this->debugMessenger) != VK_SUCCESS) {
+        if (CreateDebugUtilsMessengerEXT(vk->instance, &createInfo, nullptr, &this->debugMessenger) != VK_SUCCESS) {
             throw std::runtime_error("failed to set up debug messenger!");
         }
     }
 
     void Engine::pickPhysicalDevice() {
         uint32_t deviceCount = 0;
-        vkEnumeratePhysicalDevices(vk.instance, &deviceCount, nullptr);
+        vkEnumeratePhysicalDevices(vk->instance, &deviceCount, nullptr);
 
         if (deviceCount == 0) {
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
         }
 
         std::vector<VkPhysicalDevice> devices(deviceCount);
-        vkEnumeratePhysicalDevices(vk.instance, &deviceCount, devices.data());
+        vkEnumeratePhysicalDevices(vk->instance, &deviceCount, devices.data());
 
         for (const auto& device : devices) {
-            if (isDeviceSuitable(vk.surface, device)) {
-                vk.physicalDevice = device;
+            if (isDeviceSuitable(vk->surface, device)) {
+                vk->physicalDevice = device;
                 this->msaaSamples = getMaxUsableSampleCount(device);
                 break;
             }
         }
 
-        if (vk.physicalDevice == VK_NULL_HANDLE) {
+        if (vk->physicalDevice == VK_NULL_HANDLE) {
             throw std::runtime_error("failed to find a suitable GPU!");
         }
     }
 
     void Engine::createLogicalDevice() {
-        QueueFamilyIndices indices = findQueueFamilies(vk.surface, vk.physicalDevice);
+        QueueFamilyIndices indices = findQueueFamilies(vk->surface, vk->physicalDevice);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsAndComputeFamily.value(), indices.presentFamily.value()};
+        std::set<uint32_t> uniqueQueueFamilies = {
+            indices.graphicsFamily.value(), 
+            indices.computeFamily.value(),
+            indices.presentFamily.value(),
+            indices.transferFamily.value(),
+        };
 
-        float queuePriority = 1.0f;
-        for (uint32_t queueFamily : uniqueQueueFamilies) {
+        float queuePriorities[] = {1.0f, 1.0f, 1.0f, 1.0f};
+        for(uint32_t queueFamily : uniqueQueueFamilies) {
             VkDeviceQueueCreateInfo queueCreateInfo{};
             queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             queueCreateInfo.queueFamilyIndex = queueFamily;
-            queueCreateInfo.queueCount = 1;
-            queueCreateInfo.pQueuePriorities = &queuePriority;
+            queueCreateInfo.queueCount = 4;
+            queueCreateInfo.pQueuePriorities = queuePriorities;
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
@@ -441,24 +449,25 @@ namespace fly {
         createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
-        if (enableValidationLayers) {
+        if(enableValidationLayers) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
         } else {
             createInfo.enabledLayerCount = 0;
         }
 
-        if (vkCreateDevice(vk.physicalDevice, &createInfo, nullptr, &vk.device) != VK_SUCCESS) {
+        if(vkCreateDevice(vk->physicalDevice, &createInfo, nullptr, &vk->device) != VK_SUCCESS) {
             throw std::runtime_error("failed to create logical device!");
         }
 
-        vkGetDeviceQueue(vk.device, indices.graphicsAndComputeFamily.value(), 0, &vk.graphicsQueue);
-        vkGetDeviceQueue(vk.device, indices.presentFamily.value(), 0, &vk.presentQueue);
-        vkGetDeviceQueue(vk.device, indices.graphicsAndComputeFamily.value(), 0, &vk.computeQueue);
+        vkGetDeviceQueue(vk->device, indices.graphicsFamily.value(), 0, &vk->graphicsQueue);
+        vkGetDeviceQueue(vk->device, indices.presentFamily.value(), 1, &vk->presentQueue);
+        vkGetDeviceQueue(vk->device, indices.computeFamily.value(), 2, &vk->computeQueue);
+        vkGetDeviceQueue(vk->device, indices.transferFamily.value(), 3, &vk->transferQueue);
     }
 
     void Engine::createSwapChain() {
-        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(vk.surface, vk.physicalDevice);
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(vk->surface, vk->physicalDevice);
 
         VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
@@ -471,43 +480,31 @@ namespace fly {
 
         VkSwapchainCreateInfoKHR createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        createInfo.surface = vk.surface;
+        createInfo.surface = vk->surface;
         createInfo.minImageCount = imageCount;
         createInfo.imageFormat = surfaceFormat.format;
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
         createInfo.imageExtent = extent;
         createInfo.imageArrayLayers = 1;
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-        QueueFamilyIndices indices = findQueueFamilies(vk.surface, vk.physicalDevice);
-        uint32_t queueFamilyIndices[] = {indices.graphicsAndComputeFamily.value(), indices.presentFamily.value()};
-
-        if (indices.graphicsAndComputeFamily != indices.presentFamily) {
-            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-            createInfo.queueFamilyIndexCount = 2;
-            createInfo.pQueueFamilyIndices = queueFamilyIndices;
-        } else {
-            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            createInfo.queueFamilyIndexCount = 0; // Optional
-            createInfo.pQueueFamilyIndices = nullptr; // Optional
-        }
-
+        
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
         createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         createInfo.presentMode = presentMode;
         createInfo.clipped = VK_TRUE;
         createInfo.oldSwapchain = VK_NULL_HANDLE;
 
-        if (vkCreateSwapchainKHR(vk.device, &createInfo, nullptr, &vk.swapChain) != VK_SUCCESS) {
+        if(vkCreateSwapchainKHR(vk->device, &createInfo, nullptr, &vk->swapChain) != VK_SUCCESS) {
             throw std::runtime_error("failed to create swap chain!");
         }
 
-        vkGetSwapchainImagesKHR(vk.device, vk.swapChain, &imageCount, nullptr);
-        vk.swapChainImages.resize(imageCount);
-        vkGetSwapchainImagesKHR(vk.device, vk.swapChain, &imageCount, vk.swapChainImages.data());
+        vkGetSwapchainImagesKHR(vk->device, vk->swapChain, &imageCount, nullptr);
+        vk->swapChainImages.resize(imageCount);
+        vkGetSwapchainImagesKHR(vk->device, vk->swapChain, &imageCount, vk->swapChainImages.data());
 
-        vk.swapChainImageFormat = surfaceFormat.format;
-        vk.swapChainExtent = extent;
+        vk->swapChainImageFormat = surfaceFormat.format;
+        vk->swapChainExtent = extent;
     }
 
     VkExtent2D Engine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
@@ -527,10 +524,10 @@ namespace fly {
     } 
 
     void Engine::createImageViews() {
-        vk.swapChainImageViews.resize(vk.swapChainImages.size());
+        vk->swapChainImageViews.resize(vk->swapChainImages.size());
         
-        for (size_t i = 0; i < vk.swapChainImages.size(); i++) {
-            vk.swapChainImageViews[i] = createImageView(this->vk, vk.swapChainImages[i], vk.swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1, false);
+        for (size_t i = 0; i < vk->swapChainImages.size(); i++) {
+            vk->swapChainImageViews[i] = createImageView(this->vk, vk->swapChainImages[i], vk->swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1, false);
         }
     }
 
@@ -568,7 +565,7 @@ namespace fly {
 
 
         VkAttachmentDescription depthAttachment{};
-        depthAttachment.format = findDepthFormat(vk.physicalDevice);
+        depthAttachment.format = findDepthFormat(vk->physicalDevice);
         depthAttachment.samples = this->msaaSamples;
         depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -607,7 +604,7 @@ namespace fly {
         renderPassInfo.dependencyCount = 1;
         renderPassInfo.pDependencies = &dependency;
 
-        if (vkCreateRenderPass(vk.device, &renderPassInfo, nullptr, &this->renderPass) != VK_SUCCESS) {
+        if (vkCreateRenderPass(vk->device, &renderPassInfo, nullptr, &this->renderPass) != VK_SUCCESS) {
             throw std::runtime_error("failed to create render pass!");
         }
     }
@@ -615,7 +612,7 @@ namespace fly {
     void Engine::createColorAndDepthTextures() {
         this->msaaColorTexture = std::make_unique<Texture>(
             this->vk, 
-            vk.swapChainExtent.width, vk.swapChainExtent.height, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
             this->hdrFormat, 
             this->msaaSamples,
             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -624,17 +621,17 @@ namespace fly {
         
         this->hdrColorTexture = std::make_unique<Texture>(
             this->vk, 
-            vk.swapChainExtent.width, vk.swapChainExtent.height, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
             this->hdrFormat, 
             VK_SAMPLE_COUNT_1_BIT,
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT
         );
 
-        auto depthFormat = findDepthFormat(vk.physicalDevice);
+        auto depthFormat = findDepthFormat(vk->physicalDevice);
         this->depthTexture = std::make_unique<Texture>(
             this->vk,
-            vk.swapChainExtent.width, vk.swapChainExtent.height, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
             depthFormat,
             this->msaaSamples,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -643,9 +640,9 @@ namespace fly {
     }
 
     void Engine::createFramebuffers() {
-        this->swapChainFramebuffers.resize(vk.swapChainImageViews.size());
+        this->swapChainFramebuffers.resize(vk->swapChainImageViews.size());
 
-        for(size_t i=0; i<vk.swapChainImageViews.size(); i++) {
+        for(size_t i=0; i<vk->swapChainImageViews.size(); i++) {
             std::array<VkImageView, 3> attachments = {
                 this->msaaColorTexture->getImageView(),
                 this->depthTexture->getImageView(),
@@ -657,11 +654,11 @@ namespace fly {
             framebufferInfo.renderPass = this->renderPass;
             framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
             framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = vk.swapChainExtent.width;
-            framebufferInfo.height = vk.swapChainExtent.height;
+            framebufferInfo.width = vk->swapChainExtent.width;
+            framebufferInfo.height = vk->swapChainExtent.height;
             framebufferInfo.layers = 1;
         
-            if (vkCreateFramebuffer(vk.device, &framebufferInfo, nullptr, &this->swapChainFramebuffers[i]) != VK_SUCCESS) {
+            if (vkCreateFramebuffer(vk->device, &framebufferInfo, nullptr, &this->swapChainFramebuffers[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create framebuffer!");
             }
         }
@@ -682,10 +679,10 @@ namespace fly {
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            if (vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr, &this->imageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr, &this->renderPassFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr, &this->computePassFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(vk.device, &fenceInfo, nullptr, &this->inFlightFences[i]) != VK_SUCCESS) {
+            if (vkCreateSemaphore(vk->device, &semaphoreInfo, nullptr, &this->imageAvailableSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(vk->device, &semaphoreInfo, nullptr, &this->renderPassFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(vk->device, &semaphoreInfo, nullptr, &this->computePassFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateFence(vk->device, &fenceInfo, nullptr, &this->inFlightFences[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create synchronization objects for a frame!");
             }
         }

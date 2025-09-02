@@ -6,8 +6,8 @@
 namespace fly {
 
     // RENDERER IMPLEMENTATION
-    Renderer2d::Renderer2d(const VulkanInstance& vk): vk{vk} {
-        this->orthoProj = glm::ortho(0.0f, (float)vk.swapChainExtent.width, 0.0f, (float)vk.swapChainExtent.height);
+    Renderer2d::Renderer2d(std::shared_ptr<VulkanInstance> vk): vk{vk} {
+        this->orthoProj = glm::ortho(0.0f, (float)vk->swapChainExtent.width, 0.0f, (float)vk->swapChainExtent.height);
     }
 
     void Renderer2d::init(std::unique_ptr<GPipeline2D> pipeline, VkCommandPool commandPool) {
@@ -155,7 +155,7 @@ namespace fly {
             descriptorWrites[1].descriptorCount = 1;
             descriptorWrites[1].pImageInfo = &imageInfo;
 
-            vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 

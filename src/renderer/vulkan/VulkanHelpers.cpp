@@ -1,4 +1,5 @@
 #include "VulkanHelpers.hpp"
+#include "Utils.hpp"
 
 #include <cstdint>
 #include <stdexcept>
@@ -10,8 +11,7 @@ namespace fly {
     
 
     void createBuffer(
-        const VulkanInstance& vk, 
-        
+        std::shared_ptr<VulkanInstance> vk, 
         VkDeviceSize size, 
         VkBufferUsageFlags usage, 
         VkMemoryPropertyFlags properties, 
@@ -24,36 +24,36 @@ namespace fly {
         bufferInfo.usage = usage;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        if (vkCreateBuffer(vk.device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+        if(vkCreateBuffer(vk->device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to create vertex buffer!");
         }
 
         VkMemoryRequirements memRequirements;
-        vkGetBufferMemoryRequirements(vk.device, buffer, &memRequirements);
+        vkGetBufferMemoryRequirements(vk->device, buffer, &memRequirements);
 
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
         allocInfo.memoryTypeIndex = findMemoryType(vk, memRequirements.memoryTypeBits, properties);
         
-        if(vkAllocateMemory(vk.device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        if(vkAllocateMemory(vk->device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate vertex buffer memory!");
         }
 
-        vkBindBufferMemory(vk.device, buffer, bufferMemory, 0);
+        vkBindBufferMemory(vk->device, buffer, bufferMemory, 0);
     }
 
     
     uint32_t findMemoryType(
-        const VulkanInstance& vk, 
+        std::shared_ptr<VulkanInstance> vk, 
         uint32_t typeFilter, 
         VkMemoryPropertyFlags properties
     ) {
         VkPhysicalDeviceMemoryProperties memProperties;
-        vkGetPhysicalDeviceMemoryProperties(vk.physicalDevice, &memProperties);
+        vkGetPhysicalDeviceMemoryProperties(vk->physicalDevice, &memProperties);
 
-        for (uint32_t i=0; i<memProperties.memoryTypeCount; i++) {
-            if (typeFilter & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+        for(uint32_t i=0; i<memProperties.memoryTypeCount; i++) {
+            if(typeFilter & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
                 return i;
             }
         }
@@ -62,7 +62,7 @@ namespace fly {
     }
 
     
-    VkCommandBuffer beginSingleTimeCommands(const VulkanInstance& vk, VkCommandPool commandPool) {
+    VkCommandBuffer beginSingleTimeCommands(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool) {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -70,7 +70,7 @@ namespace fly {
         allocInfo.commandBufferCount = 1;
     
         VkCommandBuffer commandBuffer;
-        vkAllocateCommandBuffers(vk.device, &allocInfo, &commandBuffer);
+        vkAllocateCommandBuffers(vk->device, &allocInfo, &commandBuffer);
     
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -82,7 +82,12 @@ namespace fly {
     }
 
     
-    void endSingleTimeCommands(const VulkanInstance& vk, const VkCommandPool commandPool, VkCommandBuffer commandBuffer) {
+    void endSingleTimeCommands(
+        std::shared_ptr<VulkanInstance> vk, 
+        const VkCommandPool commandPool, 
+        VkCommandBuffer commandBuffer, 
+        QueueType type
+    ) {
         vkEndCommandBuffer(commandBuffer);
     
         VkSubmitInfo submitInfo{};
@@ -90,10 +95,18 @@ namespace fly {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
     
-        vkQueueSubmit(vk.computeQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(vk.computeQueue);
+        FLY_ASSERT(type != QueueType::PRESENT, "a single time command queue can't be the present queue");
+        FLY_ASSERT(type != QueueType::GRAPHICS, "a single time command queue can't be the graphics queue");
+        {
+            VkQueue queue = nullptr;
+            if(type == QueueType::TRANSFER) queue = vk->transferQueue;
+            if(type == QueueType::COMPUTE ) queue = vk->computeQueue;
+
+            vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+            vkQueueWaitIdle(queue);
+        }
     
-        vkFreeCommandBuffers(vk.device, commandPool, 1, &commandBuffer);
+        vkFreeCommandBuffers(vk->device, commandPool, 1, &commandBuffer);
     }
 
     
@@ -121,9 +134,9 @@ namespace fly {
             VkFormatProperties props;
             vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
         
-            if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+            if(tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
                 return format;
-            } else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+            } else if(tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
                 return format;
             }
         }
@@ -141,39 +154,36 @@ namespace fly {
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
-        int i = 0;
-        for (const auto& queueFamily : queueFamilies) {
-            if((queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT)) {
-                indices.graphicsAndComputeFamily = i;
-            }
+        for(size_t i=0; i<queueFamilyCount; ++i) {
+            if(queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+                indices.graphicsFamily = i;
+            if(queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT)
+                indices.computeFamily = i;
+            if(queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
+                indices.transferFamily = i;
 
             VkBool32 presentSupport = false;
             vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-
-            if (presentSupport) {
+            if(presentSupport)
                 indices.presentFamily = i;
-            }
 
-            if (indices.isComplete()) {
+            if(indices.isComplete())
                 break;
-            }
-
-            i++;
         }
 
         return indices;
     }
 
-    VkCommandPool createCommandPool(const VulkanInstance& vk, VkCommandPoolCreateFlags flags) {
-        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(vk.surface, vk.physicalDevice);
+    VkCommandPool createCommandPool(std::shared_ptr<VulkanInstance> vk, VkCommandPoolCreateFlags flags) {
+        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(vk->surface, vk->physicalDevice);
 
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsAndComputeFamily.value();
+        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
         poolInfo.flags = flags;
 
         VkCommandPool pool;
-        if (vkCreateCommandPool(vk.device, &poolInfo, nullptr, &pool) != VK_SUCCESS) {
+        if (vkCreateCommandPool(vk->device, &poolInfo, nullptr, &pool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create command pool!");
         }
 
@@ -235,9 +245,7 @@ namespace fly {
         }
         
         VkPhysicalDeviceFeatures supportedFeatures;
-        vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
-
-        
+        vkGetPhysicalDeviceFeatures(device, &supportedFeatures);        
 
         return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
     }
@@ -322,7 +330,7 @@ namespace fly {
 
 
     void generateMipmaps(
-        const VulkanInstance& vk,
+        std::shared_ptr<VulkanInstance> vk,
         VkCommandBuffer commandBuffer,
         VkImage image, 
         VkFormat imageFormat, 
@@ -333,7 +341,7 @@ namespace fly {
     ) {
         // Check if image format supports linear blitting
         VkFormatProperties formatProperties;
-        vkGetPhysicalDeviceFormatProperties(vk.physicalDevice, imageFormat, &formatProperties);
+        vkGetPhysicalDeviceFormatProperties(vk->physicalDevice, imageFormat, &formatProperties);
         
         if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
             throw std::runtime_error("texture image format does not support linear blitting!");
@@ -547,7 +555,7 @@ namespace fly {
     }
 
     VkImageView createImageView(
-        const VulkanInstance& vk,
+        std::shared_ptr<VulkanInstance> vk,
         VkImage image, 
         VkFormat format, 
         VkImageAspectFlags aspectFlags, 
@@ -571,7 +579,7 @@ namespace fly {
         }
     
         VkImageView imageView;
-        if (vkCreateImageView(vk.device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+        if (vkCreateImageView(vk->device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture image view!");
         }
     
@@ -580,7 +588,7 @@ namespace fly {
 
 
     void createImage(
-        const VulkanInstance& vk,
+        std::shared_ptr<VulkanInstance> vk,
         uint32_t width, 
         uint32_t height, 
         uint32_t mipLevels, 
@@ -613,33 +621,33 @@ namespace fly {
             imageInfo.arrayLayers = 1;
         }
     
-        if (vkCreateImage(vk.device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+        if (vkCreateImage(vk->device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
             throw std::runtime_error("failed to create image!");
         }
     
         VkMemoryRequirements memRequirements;
-        vkGetImageMemoryRequirements(vk.device, image, &memRequirements);
+        vkGetImageMemoryRequirements(vk->device, image, &memRequirements);
     
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
         allocInfo.memoryTypeIndex = findMemoryType(vk, memRequirements.memoryTypeBits, properties);
     
-        if (vkAllocateMemory(vk.device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+        if (vkAllocateMemory(vk->device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate image memory!");
         }
     
-        vkBindImageMemory(vk.device, image, imageMemory, 0);
+        vkBindImageMemory(vk->device, image, imageMemory, 0);
     }
 
     
     std::pair<VkPipeline, VkPipelineLayout> createComputePipeline(
-        const VulkanInstance& vk, 
+        std::shared_ptr<VulkanInstance> vk, 
         VkDescriptorSetLayout descriptorSetLayout, 
         const std::vector<char>& shaderCode, 
         size_t pushConstantSize
     ) {
-        VkShaderModule computeShaderModule = createShaderModule(vk.device, shaderCode);
+        VkShaderModule computeShaderModule = createShaderModule(vk->device, shaderCode);
 
         VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
         computeShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -663,7 +671,7 @@ namespace fly {
         }
 
         VkPipelineLayout pipelineLayout;
-        if(vkCreatePipelineLayout(vk.device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+        if(vkCreatePipelineLayout(vk->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create compute pipeline layout!");
         }
 
@@ -673,18 +681,18 @@ namespace fly {
         pipelineInfo.stage = computeShaderStageInfo;
 
         VkPipeline pipeline;
-        if(vkCreateComputePipelines(vk.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
+        if(vkCreateComputePipelines(vk->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
             throw std::runtime_error("failed to create compute pipeline!");
         }
 
-        vkDestroyShaderModule(vk.device, computeShaderModule, nullptr);
+        vkDestroyShaderModule(vk->device, computeShaderModule, nullptr);
 
         return std::make_pair(pipeline, pipelineLayout);
     }
 
     
     std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> allocateDescriptorSets(
-        const VulkanInstance& vk, 
+        std::shared_ptr<VulkanInstance> vk, 
         VkDescriptorSetLayout descriptorSetLayout,
         VkDescriptorPool descriptorPool
     ) {
@@ -696,14 +704,14 @@ namespace fly {
         allocInfo.pSetLayouts = layouts.data();
 
         std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> descriptorSets;
-        if(vkAllocateDescriptorSets(vk.device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+        if(vkAllocateDescriptorSets(vk->device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate descriptor sets!");
         }
 
         return descriptorSets;
     }
 
-    VkDescriptorPool createDescriptorPoolWithLayout(DescriptorSetLayout layout, const VulkanInstance& vk) {
+    VkDescriptorPool createDescriptorPoolWithLayout(DescriptorSetLayout layout, std::shared_ptr<VulkanInstance> vk) {
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = static_cast<uint32_t>(layout.poolSizes.size());
@@ -711,7 +719,7 @@ namespace fly {
         poolInfo.maxSets = layout.poolSizes[0].descriptorCount;
 
         VkDescriptorPool descriptorPool;
-        if(vkCreateDescriptorPool(vk.device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+        if(vkCreateDescriptorPool(vk->device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
         }
 

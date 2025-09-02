@@ -1,6 +1,7 @@
 #pragma once 
 
 #include <array>
+#include <memory>
 
 #include "VulkanTypes.h"
 #include "VulkanConstants.h"
@@ -9,7 +10,7 @@ namespace fly {
 
     //FUNCTION DECLARATIONS
     void createBuffer(
-        const VulkanInstance& vk, 
+        std::shared_ptr<VulkanInstance> vk, 
         VkDeviceSize size, 
         VkBufferUsageFlags usage, 
         VkMemoryPropertyFlags properties, 
@@ -18,14 +19,19 @@ namespace fly {
     );
 
     uint32_t findMemoryType(
-        const VulkanInstance& vk, 
+        std::shared_ptr<VulkanInstance> vk, 
         uint32_t typeFilter, 
         VkMemoryPropertyFlags properties
     );
 
-    VkCommandBuffer beginSingleTimeCommands(const VulkanInstance& vk, const VkCommandPool commandPool);
+    VkCommandBuffer beginSingleTimeCommands(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool);
 
-    void endSingleTimeCommands(const VulkanInstance& vk, const VkCommandPool commandPool, VkCommandBuffer commandBuffer);
+    void endSingleTimeCommands(
+        std::shared_ptr<VulkanInstance> vk, 
+        const VkCommandPool commandPool, 
+        VkCommandBuffer commandBuffer, 
+        QueueType type
+    );
 
     void copyBuffer(
         VkCommandBuffer commandBuffer,
@@ -42,7 +48,7 @@ namespace fly {
         VkFormatFeatureFlags features
     );
 
-    VkCommandPool createCommandPool(const VulkanInstance& vk, VkCommandPoolCreateFlags flags);
+    VkCommandPool createCommandPool(std::shared_ptr<VulkanInstance> vk, VkCommandPoolCreateFlags flags);
 
     QueueFamilyIndices findQueueFamilies(const VkSurfaceKHR surface, VkPhysicalDevice physicalDevice);
 
@@ -67,7 +73,7 @@ namespace fly {
 
     //IMAGE
     void generateMipmaps(
-        const VulkanInstance& vk,
+        std::shared_ptr<VulkanInstance> vk,
         VkCommandBuffer commandBuffer,
         VkImage image, 
         VkFormat imageFormat, 
@@ -109,7 +115,7 @@ namespace fly {
     );
 
     VkImageView createImageView(
-        const VulkanInstance& vk,
+        std::shared_ptr<VulkanInstance> vk,
         VkImage image, 
         VkFormat format, 
         VkImageAspectFlags aspectFlags, 
@@ -118,7 +124,7 @@ namespace fly {
     );
 
     void createImage(
-        const VulkanInstance& vk,
+        std::shared_ptr<VulkanInstance> vk,
         uint32_t width, 
         uint32_t height, 
         uint32_t mipLevels, 
@@ -133,19 +139,19 @@ namespace fly {
     );
 
     std::pair<VkPipeline, VkPipelineLayout> createComputePipeline(
-        const VulkanInstance& vk, 
+        std::shared_ptr<VulkanInstance> vk, 
         VkDescriptorSetLayout descriptorSetLayout, 
         const std::vector<char>& shaderCode, 
         size_t pushConstantSize
     );
 
     std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> allocateDescriptorSets(
-        const VulkanInstance& vk, 
+        std::shared_ptr<VulkanInstance> vk, 
         VkDescriptorSetLayout descriptorSetLayout,
         VkDescriptorPool descriptorPool
     );
 
-    VkDescriptorPool createDescriptorPoolWithLayout(DescriptorSetLayout layout, const VulkanInstance& vk);
+    VkDescriptorPool createDescriptorPoolWithLayout(DescriptorSetLayout layout, std::shared_ptr<VulkanInstance> vk);
 
 
 

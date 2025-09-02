@@ -9,11 +9,11 @@
 
 namespace fly {
 
-    UIRenderer::UIRenderer(GLFWwindow* window, const VulkanInstance& vk): vk{vk}, renderer2d(vk), textRenderer(vk) {
+    UIRenderer::UIRenderer(GLFWwindow* window, std::shared_ptr<VulkanInstance> vk): vk{vk}, renderer2d(vk), textRenderer(vk) {
         createDescriptorPool();
         createRenderPass();
         this->uiCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-        this->uiCommandBuffers = createCommandBuffers(vk.device, MAX_FRAMES_IN_FLIGHT, this->uiCommandPool);
+        this->uiCommandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->uiCommandPool);
         createFramebuffers();
         createSyncObjects();
 
@@ -31,20 +31,20 @@ namespace fly {
     UIRenderer::~UIRenderer() {
         cleanupSwapchain();
 
-        vkDestroyRenderPass(vk.device, this->uiRenderPass, nullptr);
+        vkDestroyRenderPass(vk->device, this->uiRenderPass, nullptr);
 
-        vkFreeCommandBuffers(vk.device, this->uiCommandPool, static_cast<uint32_t>(this->uiCommandBuffers.size()), this->uiCommandBuffers.data());
-        vkDestroyCommandPool(vk.device, this->uiCommandPool, nullptr);
+        vkFreeCommandBuffers(vk->device, this->uiCommandPool, static_cast<uint32_t>(this->uiCommandBuffers.size()), this->uiCommandBuffers.data());
+        vkDestroyCommandPool(vk->device, this->uiCommandPool, nullptr);
 
         for (int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            vkDestroySemaphore(vk.device, this->uiRenderFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(vk->device, this->uiRenderFinishedSemaphores[i], nullptr);
         }
 
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
         
-        vkDestroyDescriptorPool(vk.device, this->uiDescriptorPool, nullptr);
+        vkDestroyDescriptorPool(vk->device, this->uiDescriptorPool, nullptr);
     }
 
     void UIRenderer::initImgui(GLFWwindow* window) {
@@ -61,11 +61,11 @@ namespace fly {
         // Setup Platform/Renderer bindings
         ImGui_ImplGlfw_InitForVulkan(window, true);
         ImGui_ImplVulkan_InitInfo init_info{};
-        init_info.Instance = vk.instance;
-        init_info.PhysicalDevice = vk.physicalDevice;
-        init_info.Device = vk.device;
-        init_info.QueueFamily = findQueueFamilies(vk.surface, vk.physicalDevice).graphicsAndComputeFamily.value();
-        init_info.Queue = vk.graphicsQueue;
+        init_info.Instance = vk->instance;
+        init_info.PhysicalDevice = vk->physicalDevice;
+        init_info.Device = vk->device;
+        init_info.QueueFamily = findQueueFamilies(vk->surface, vk->physicalDevice).graphicsFamily.value();
+        init_info.Queue = vk->graphicsQueue;
         init_info.PipelineCache = VK_NULL_HANDLE;
         init_info.DescriptorPool = this->uiDescriptorPool;
         init_info.Allocator = nullptr;
@@ -100,7 +100,7 @@ namespace fly {
 
     void UIRenderer::cleanupSwapchain() {
         for (auto framebuffer : this->uiFramebuffers) {
-            vkDestroyFramebuffer(vk.device, framebuffer, nullptr);
+            vkDestroyFramebuffer(vk->device, framebuffer, nullptr);
         }
     }
 
@@ -124,7 +124,7 @@ namespace fly {
         renderPassInfo.framebuffer = this->uiFramebuffers[imageIndex];
         
         renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = vk.swapChainExtent;
+        renderPassInfo.renderArea.extent = vk->swapChainExtent;
         
         VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
         renderPassInfo.clearValueCount = 1;
@@ -135,15 +135,15 @@ namespace fly {
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
-        viewport.width = static_cast<float>(vk.swapChainExtent.width);
-        viewport.height = static_cast<float>(vk.swapChainExtent.height);
+        viewport.width = static_cast<float>(vk->swapChainExtent.width);
+        viewport.height = static_cast<float>(vk->swapChainExtent.height);
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
         VkRect2D scissor{};
         scissor.offset = {0, 0};
-        scissor.extent = vk.swapChainExtent;
+        scissor.extent = vk->swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
         this->renderer2d.getPipeline()->recordOnCommandBuffer(commandBuffer, currentFrame);
@@ -173,14 +173,14 @@ namespace fly {
         pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
         pool_info.pPoolSizes = pool_sizes;
         
-        if(vkCreateDescriptorPool(vk.device, &pool_info, nullptr, &this->uiDescriptorPool) != VK_SUCCESS) {
+        if(vkCreateDescriptorPool(vk->device, &pool_info, nullptr, &this->uiDescriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create UI descriptor pool");
         }
     }
 
     void UIRenderer::createRenderPass() {
         VkAttachmentDescription attachment = {};
-        attachment.format = vk.swapChainImageFormat;
+        attachment.format = vk->swapChainImageFormat;
         attachment.samples = VK_SAMPLE_COUNT_1_BIT;
         
         attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -219,17 +219,17 @@ namespace fly {
         info.dependencyCount = 1;
         info.pDependencies = &dependency;
         
-        if (vkCreateRenderPass(vk.device, &info, nullptr, &this->uiRenderPass) != VK_SUCCESS) {
+        if (vkCreateRenderPass(vk->device, &info, nullptr, &this->uiRenderPass) != VK_SUCCESS) {
             throw std::runtime_error("could not create UI render pass");
         }
     }
 
     void UIRenderer::createFramebuffers() {
-        this->uiFramebuffers.resize(vk.swapChainImageViews.size());
+        this->uiFramebuffers.resize(vk->swapChainImageViews.size());
 
-        for(size_t i=0; i<vk.swapChainImageViews.size(); i++) {
+        for(size_t i=0; i<vk->swapChainImageViews.size(); i++) {
             VkImageView attachments[] = {
-                vk.swapChainImageViews[i]
+                vk->swapChainImageViews[i]
             };
         
             VkFramebufferCreateInfo framebufferInfo{};
@@ -237,11 +237,11 @@ namespace fly {
             framebufferInfo.renderPass = this->uiRenderPass;
             framebufferInfo.attachmentCount = 1;
             framebufferInfo.pAttachments = attachments;
-            framebufferInfo.width = vk.swapChainExtent.width;
-            framebufferInfo.height = vk.swapChainExtent.height;
+            framebufferInfo.width = vk->swapChainExtent.width;
+            framebufferInfo.height = vk->swapChainExtent.height;
             framebufferInfo.layers = 1;
         
-            if (vkCreateFramebuffer(vk.device, &framebufferInfo, nullptr, &this->uiFramebuffers[i]) != VK_SUCCESS) {
+            if (vkCreateFramebuffer(vk->device, &framebufferInfo, nullptr, &this->uiFramebuffers[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create UI framebuffer!");
             }
         }
@@ -254,7 +254,7 @@ namespace fly {
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            if (vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr, &this->uiRenderFinishedSemaphores[i]) != VK_SUCCESS) {
+            if (vkCreateSemaphore(vk->device, &semaphoreInfo, nullptr, &this->uiRenderFinishedSemaphores[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create UI semaphore objects for a frame!");
             }
         }

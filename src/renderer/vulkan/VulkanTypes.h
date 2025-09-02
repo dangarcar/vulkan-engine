@@ -6,6 +6,10 @@
 
 namespace fly {
 
+    enum class QueueType: int {
+        GRAPHICS = 0, COMPUTE, PRESENT, TRANSFER
+    };
+
     struct VulkanInstance {
         VkInstance instance;
         VkSurfaceKHR surface;
@@ -13,24 +17,20 @@ namespace fly {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkDevice device;
 
-        VkQueue graphicsQueue;
-        VkQueue presentQueue;
-        VkQueue computeQueue;
+        VkQueue graphicsQueue, computeQueue, presentQueue, transferQueue;
 
         VkSwapchainKHR swapChain;
         VkFormat swapChainImageFormat;
         VkExtent2D swapChainExtent;
         std::vector<VkImage> swapChainImages;
         std::vector<VkImageView> swapChainImageViews;
-
     };
 
     struct QueueFamilyIndices {
-        std::optional<uint32_t> graphicsAndComputeFamily;
-        std::optional<uint32_t> presentFamily;
+        std::optional<uint32_t> graphicsFamily, computeFamily, presentFamily, transferFamily;
     
         bool isComplete() {
-            return graphicsAndComputeFamily.has_value() && presentFamily.has_value();
+            return graphicsFamily.has_value() && computeFamily.has_value() && presentFamily.has_value() && transferFamily.has_value();
         }
     };
     

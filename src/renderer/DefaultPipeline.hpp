@@ -35,7 +35,7 @@ namespace fly {
 
     class DefaultPipeline: public TGraphicsPipeline<Vertex> {
     public:
-        DefaultPipeline(const VulkanInstance& vk): TGraphicsPipeline{vk, true} {}
+        DefaultPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, true} {}
         ~DefaultPipeline() = default;
     
         void updateDescriptorSet(
@@ -54,6 +54,6 @@ namespace fly {
     };
 
     using VertexArray = TVertexArray<Vertex>;
-    std::unique_ptr<VertexArray> loadModel(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path filepath);
+    std::unique_ptr<VertexArray> loadModel(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path filepath);
 
 }

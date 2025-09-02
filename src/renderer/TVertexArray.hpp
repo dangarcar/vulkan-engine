@@ -10,7 +10,7 @@ namespace fly {
     template<typename Vertex_t>
     class TVertexArray {
     public:
-        TVertexArray(const VulkanInstance& vk, const VkCommandPool commandPool, std::vector<Vertex_t>&& vertices, std::vector<uint32_t>&& indices): 
+        TVertexArray(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::vector<Vertex_t>&& vertices, std::vector<uint32_t>&& indices): 
             vertices{vertices}, indices{indices}, vk{vk}
         {
             createVertexBuffer(commandPool);
@@ -18,11 +18,11 @@ namespace fly {
         }
         
         ~TVertexArray() {
-            vkDestroyBuffer(vk.device, this->indexBuffer, nullptr);
-            vkFreeMemory(vk.device, this->indexBufferMemory, nullptr);
+            vkDestroyBuffer(vk->device, this->indexBuffer, nullptr);
+            vkFreeMemory(vk->device, this->indexBufferMemory, nullptr);
 
-            vkDestroyBuffer(vk.device, this->vertexBuffer, nullptr);
-            vkFreeMemory(vk.device, this->vertexBufferMemory, nullptr);
+            vkDestroyBuffer(vk->device, this->vertexBuffer, nullptr);
+            vkFreeMemory(vk->device, this->vertexBufferMemory, nullptr);
         }
 
         VkBuffer getVertexBuffer() const { return vertexBuffer; }
@@ -39,7 +39,7 @@ namespace fly {
         VkBuffer indexBuffer;
         VkDeviceMemory indexBufferMemory;
     
-        const VulkanInstance& vk;
+        std::shared_ptr<VulkanInstance> vk;
 
     private:
         void createVertexBuffer(const VkCommandPool commandPool) {
@@ -57,9 +57,9 @@ namespace fly {
             );
     
             void* data;
-            vkMapMemory(vk.device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            vkMapMemory(vk->device, stagingBufferMemory, 0, bufferSize, 0, &data);
             memcpy(data, vertices.data(), (size_t) bufferSize);
-            vkUnmapMemory(vk.device, stagingBufferMemory);
+            vkUnmapMemory(vk->device, stagingBufferMemory);
     
             createBuffer(
                 vk,
@@ -80,11 +80,11 @@ namespace fly {
                     bufferSize
                 );
 
-                endSingleTimeCommands(vk, commandPool, commandBuffer);
+                endSingleTimeCommands(vk, commandPool, commandBuffer, QueueType::TRANSFER);
             }
     
-            vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
-            vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
+            vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
+            vkFreeMemory(vk->device, stagingBufferMemory, nullptr);
         }    
         
         void createIndexBuffer(const VkCommandPool commandPool) {
@@ -102,9 +102,9 @@ namespace fly {
             );
     
             void* data;
-            vkMapMemory(vk.device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            vkMapMemory(vk->device, stagingBufferMemory, 0, bufferSize, 0, &data);
             memcpy(data, indices.data(), (size_t) bufferSize);
-            vkUnmapMemory(vk.device, stagingBufferMemory);
+            vkUnmapMemory(vk->device, stagingBufferMemory);
     
             createBuffer(
                 vk,
@@ -124,11 +124,11 @@ namespace fly {
                     this->indexBuffer, 
                     bufferSize
                 );
-                endSingleTimeCommands(vk, commandPool, commandBuffer);
+                endSingleTimeCommands(vk, commandPool, commandBuffer, QueueType::TRANSFER);
             }
     
-            vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
-            vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
+            vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
+            vkFreeMemory(vk->device, stagingBufferMemory, nullptr);
         }
     
     };

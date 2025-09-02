@@ -16,7 +16,7 @@ namespace fly {
 
     class FilterPipeline {
     public:
-        FilterPipeline(const VulkanInstance& vk): vk{vk} {}
+        FilterPipeline(std::shared_ptr<VulkanInstance> vk): vk{vk} {}
         virtual ~FilterPipeline();
 
         virtual void allocate(); // Has default implementation, but can be overriden
@@ -28,7 +28,7 @@ namespace fly {
         virtual std::vector<char> getShaderCode() = 0;
         virtual DescriptorSetLayout createDescriptorSetLayout() = 0;
         
-        const VulkanInstance& vk;
+        std::shared_ptr<VulkanInstance> vk;
         std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> descriptorSets;
         DescriptorSetLayout descriptorSetLayout;
         VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
@@ -41,7 +41,7 @@ namespace fly {
     private:
         static constexpr const char* GRAYSCALE_SHADER_SRC = "vulkan-engine/shaders/filters/bin/grayscale.comp.spv";
     public:
-        GrayscaleFilter(const VulkanInstance& vk): FilterPipeline(vk) {}
+        GrayscaleFilter(std::shared_ptr<VulkanInstance> vk): FilterPipeline(vk) {}
 
         void createResources() override;
         void applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, VkImage outputImage, uint32_t currentFrame) override;
@@ -63,7 +63,7 @@ namespace fly {
             float exposure;
         };
 
-        TonemapFilter(const VulkanInstance& vk): FilterPipeline(vk) {}
+        TonemapFilter(std::shared_ptr<VulkanInstance> vk): FilterPipeline(vk) {}
 
         void createResources() override;
         void applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, VkImage outputImage, uint32_t currentFrame) override;
@@ -89,7 +89,7 @@ namespace fly {
         struct UpsamplePush { glm::vec2 invNormCurrResolution, filterRadius; float bloomIntensity; };
         struct DownsamplePush { glm::vec2 srcTexelSize, invNormCurrResolution; };
 
-        BloomFilter(const VulkanInstance& vk): FilterPipeline(vk) {}
+        BloomFilter(std::shared_ptr<VulkanInstance> vk): FilterPipeline(vk) {}
         ~BloomFilter() override;
 
         void allocate() override;

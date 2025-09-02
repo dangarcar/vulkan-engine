@@ -32,7 +32,7 @@ namespace fly {
 
     //TEXTURE IN DEPTH
     Texture::Texture(
-        const VulkanInstance& vk, 
+        std::shared_ptr<VulkanInstance> vk, 
         uint32_t width, uint32_t height, 
         VkFormat format, 
         VkSampleCountFlagBits numSamples,
@@ -59,7 +59,7 @@ namespace fly {
     }
 
     //PNG OR JPEG WITH MIPMAP GENERATION
-    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format):
+    Texture::Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format):
         format{format}, vk{vk}, cubemap{false}
     {
         ScopeTimer t(std::format("Texture load {}", path.string())); //TODO: remove timer
@@ -78,21 +78,21 @@ namespace fly {
             throw std::runtime_error("failed to load texture image!");
         }
 
-        _createTextureFromPixels(vk, commandPool, pixels, imageSize);
+        _createTextureFromPixels(commandPool, pixels, imageSize);
 
         stbi_image_free(pixels);
     }
 
     //DEFAULT TEXTURE
-    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool): 
+    Texture::Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool): 
         width{2}, height{2}, format{VK_FORMAT_R8G8B8A8_SRGB}, vk{vk}, cubemap{false}
     {
         uint32_t pixels[4] = { 0xFFFF00FFu, 0xFF000000u, 0xFF000000u, 0xFFFF00FFu };
-        _createTextureFromPixels(vk, commandPool, pixels, sizeof(pixels));
+        _createTextureFromPixels(commandPool, pixels, sizeof(pixels));
     }
 
     //KTX TEXTURE WITH MIPMAPS INCLUDED IN BC7
-    Texture::Texture(const VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path ktxPath):
+    Texture::Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path ktxPath):
         vk{vk}
     {
         ScopeTimer t(std::format("KTX Texture {}", ktxPath.string()));
@@ -149,12 +149,12 @@ namespace fly {
             }
         }
 
-        _createTextureFromKtx2(vk, commandPool, texture, regions);
+        _createTextureFromKtx2(commandPool, texture, regions);
 
         ktxTexture_Destroy(reinterpret_cast<ktxTexture*>(texture));
     }
 
-    void Texture::_createTextureFromPixels(const VulkanInstance& vk, const VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize) {        
+    void Texture::_createTextureFromPixels(const VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize) {        
         this->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(this->width, this->height)))) + 1;
         
         VkBuffer stagingBuffer;
@@ -170,9 +170,9 @@ namespace fly {
         );
         
         void* data;
-        vkMapMemory(vk.device, stagingBufferMemory, 0, imageSize, 0, &data);
+        vkMapMemory(vk->device, stagingBufferMemory, 0, imageSize, 0, &data);
         memcpy(data, pixels, static_cast<size_t>(imageSize));
-        vkUnmapMemory(vk.device, stagingBufferMemory);
+        vkUnmapMemory(vk->device, stagingBufferMemory);
         
         createImage(
             vk,    
@@ -223,16 +223,16 @@ namespace fly {
                 this->cubemap
             );
 
-            endSingleTimeCommands(vk, commandPool, commandBuffer);
+            endSingleTimeCommands(vk, commandPool, commandBuffer, QueueType::TRANSFER);
         }
         
-        vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
-        vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
+        vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
+        vkFreeMemory(vk->device, stagingBufferMemory, nullptr);
 
         this->imageView = createImageView(vk, this->image, this->format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
     }
 
-    void Texture::_createTextureFromKtx2(const VulkanInstance& vk, const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions) {
+    void Texture::_createTextureFromKtx2(const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions) {
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         
@@ -246,9 +246,9 @@ namespace fly {
         );
     
         void* data;
-        vkMapMemory(vk.device, stagingBufferMemory, 0, texture->dataSize, 0, &data);
+        vkMapMemory(vk->device, stagingBufferMemory, 0, texture->dataSize, 0, &data);
         memcpy(data, texture->pData, static_cast<size_t>(texture->dataSize));
-        vkUnmapMemory(vk.device, stagingBufferMemory);
+        vkUnmapMemory(vk->device, stagingBufferMemory);
     
         createImage(
             vk,    
@@ -303,20 +303,20 @@ namespace fly {
                 this->cubemap
             );
 
-            endSingleTimeCommands(vk, commandPool, commandBuffer);
+            endSingleTimeCommands(vk, commandPool, commandBuffer, QueueType::TRANSFER);
         }
 
-        vkDestroyBuffer(vk.device, stagingBuffer, nullptr);
-        vkFreeMemory(vk.device, stagingBufferMemory, nullptr);
+        vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
+        vkFreeMemory(vk->device, stagingBufferMemory, nullptr);
 
         this->imageView = createImageView(vk, this->image, this->format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
     }
 
 
     Texture::~Texture() {
-        vkDestroyImageView(vk.device, this->imageView, nullptr);
-        vkDestroyImage(vk.device, this->image, nullptr);
-        vkFreeMemory(vk.device, this->imageMemory, nullptr);
+        vkDestroyImageView(vk->device, this->imageView, nullptr);
+        vkDestroyImage(vk->device, this->image, nullptr);
+        vkFreeMemory(vk->device, this->imageMemory, nullptr);
     }
 
     std::unique_ptr<Texture> Texture::copyToFormat(VkFormat newFormat, VkImageUsageFlags usage, VkCommandBuffer commandBuffer) const {
@@ -384,7 +384,7 @@ namespace fly {
 
 
     //TEXTURE SAMPLER
-    TextureSampler::TextureSampler(const VulkanInstance& vk, uint32_t mipLevels, Filter filter): vk{vk} {
+    TextureSampler::TextureSampler(std::shared_ptr<VulkanInstance> vk, uint32_t mipLevels, Filter filter): vk{vk} {
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;            
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -392,7 +392,7 @@ namespace fly {
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 
         VkPhysicalDeviceProperties properties{};
-        vkGetPhysicalDeviceProperties(vk.physicalDevice, &properties);
+        vkGetPhysicalDeviceProperties(vk->physicalDevice, &properties);
         
         if(filter == Filter::LINEAR) {
             samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -418,13 +418,13 @@ namespace fly {
         samplerInfo.maxLod = static_cast<float>(mipLevels);
         samplerInfo.mipLodBias = 0.0f; // Optional
 
-        if(vkCreateSampler(vk.device, &samplerInfo, nullptr, &this->textureSampler) != VK_SUCCESS) {
+        if(vkCreateSampler(vk->device, &samplerInfo, nullptr, &this->textureSampler) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture sampler!");
         }
     }
 
     TextureSampler::~TextureSampler() {
-        vkDestroySampler(vk.device, this->textureSampler, nullptr);
+        vkDestroySampler(vk->device, this->textureSampler, nullptr);
     }
 
 }
