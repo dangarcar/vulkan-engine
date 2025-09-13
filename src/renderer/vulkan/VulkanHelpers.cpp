@@ -1,5 +1,4 @@
 #include "VulkanHelpers.hpp"
-#include "Utils.hpp"
 
 #include <cstdint>
 #include <stdexcept>
@@ -85,8 +84,7 @@ namespace fly {
     void endSingleTimeCommands(
         std::shared_ptr<VulkanInstance> vk, 
         const VkCommandPool commandPool, 
-        VkCommandBuffer commandBuffer, 
-        QueueType type
+        VkCommandBuffer commandBuffer
     ) {
         vkEndCommandBuffer(commandBuffer);
     
@@ -95,17 +93,21 @@ namespace fly {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
     
-        FLY_ASSERT(type != QueueType::PRESENT, "a single time command queue can't be the present queue");
-        FLY_ASSERT(type != QueueType::GRAPHICS, "a single time command queue can't be the graphics queue");
+        VkFence fence;
+        VkFenceCreateInfo fenceInfo{};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        vkCreateFence(vk->device, &fenceInfo, nullptr, &fence);
+        
+        vkResetFences(vk->device, 1, &fence);
         {
-            VkQueue queue = nullptr;
-            if(type == QueueType::TRANSFER) queue = vk->transferQueue;
-            if(type == QueueType::COMPUTE ) queue = vk->computeQueue;
-
-            vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-            vkQueueWaitIdle(queue);
+            std::unique_lock<std::mutex> lock(vk->submitMtx);
+            if(vkQueueSubmit(vk->generalQueue, 1, &submitInfo, fence))
+                throw std::runtime_error("Couldn't execute single time command!");
         }
-    
+        vkWaitForFences(vk->device, 1, &fence, VK_TRUE, UINT64_MAX);
+        vkDestroyFence(vk->device, fence, nullptr);
+        
         vkFreeCommandBuffers(vk->device, commandPool, 1, &commandBuffer);
     }
 
@@ -155,12 +157,8 @@ namespace fly {
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
         for(size_t i=0; i<queueFamilyCount; ++i) {
-            if(queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-                indices.graphicsFamily = i;
-            if(queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT)
-                indices.computeFamily = i;
-            if(queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
-                indices.transferFamily = i;
+            if(queueFamilies[i].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
+                indices.generalFamily = i;
 
             VkBool32 presentSupport = false;
             vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
@@ -179,7 +177,7 @@ namespace fly {
 
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+        poolInfo.queueFamilyIndex = queueFamilyIndices.generalFamily.value();
         poolInfo.flags = flags;
 
         VkCommandPool pool;

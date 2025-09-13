@@ -2,6 +2,7 @@
 
 #include "VulkanTypes.h"
 #include <stdexcept>
+#include <memory>
 
 namespace fly {
 

@@ -29,8 +29,7 @@ namespace fly {
     void endSingleTimeCommands(
         std::shared_ptr<VulkanInstance> vk, 
         const VkCommandPool commandPool, 
-        VkCommandBuffer commandBuffer, 
-        QueueType type
+        VkCommandBuffer commandBuffer
     );
 
     void copyBuffer(

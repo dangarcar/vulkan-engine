@@ -9,7 +9,9 @@
 
 namespace fly {
 
-    UIRenderer::UIRenderer(GLFWwindow* window, std::shared_ptr<VulkanInstance> vk): vk{vk}, renderer2d(vk), textRenderer(vk) {
+    UIRenderer::UIRenderer(GLFWwindow* window, std::shared_ptr<VulkanInstance> vk): 
+            vk{vk}, renderer2d(vk), textRenderer(vk) 
+    {
         createDescriptorPool();
         createRenderPass();
         this->uiCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
@@ -64,8 +66,8 @@ namespace fly {
         init_info.Instance = vk->instance;
         init_info.PhysicalDevice = vk->physicalDevice;
         init_info.Device = vk->device;
-        init_info.QueueFamily = findQueueFamilies(vk->surface, vk->physicalDevice).graphicsFamily.value();
-        init_info.Queue = vk->graphicsQueue;
+        init_info.QueueFamily = findQueueFamilies(vk->surface, vk->physicalDevice).generalFamily.value();
+        init_info.Queue = vk->generalQueue; //FIXME:
         init_info.PipelineCache = VK_NULL_HANDLE;
         init_info.DescriptorPool = this->uiDescriptorPool;
         init_info.Allocator = nullptr;
@@ -148,7 +150,11 @@ namespace fly {
 
         this->renderer2d.getPipeline()->recordOnCommandBuffer(commandBuffer, currentFrame);
         this->textRenderer.getPipeline()->recordOnCommandBuffer(commandBuffer, currentFrame);
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+
+        {
+            std::unique_lock<std::mutex> lock(vk->submitMtx);
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+        }
 
         vkCmdEndRenderPass(commandBuffer);
         

@@ -80,7 +80,7 @@ namespace fly {
                     bufferSize
                 );
 
-                endSingleTimeCommands(vk, commandPool, commandBuffer, QueueType::TRANSFER);
+                endSingleTimeCommands(vk, commandPool, commandBuffer);
             }
     
             vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
@@ -124,7 +124,7 @@ namespace fly {
                     this->indexBuffer, 
                     bufferSize
                 );
-                endSingleTimeCommands(vk, commandPool, commandBuffer, QueueType::TRANSFER);
+                endSingleTimeCommands(vk, commandPool, commandBuffer);
             }
     
             vkDestroyBuffer(vk->device, stagingBuffer, nullptr);

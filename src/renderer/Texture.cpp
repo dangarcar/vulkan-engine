@@ -223,7 +223,7 @@ namespace fly {
                 this->cubemap
             );
 
-            endSingleTimeCommands(vk, commandPool, commandBuffer, QueueType::TRANSFER);
+            endSingleTimeCommands(vk, commandPool, commandBuffer);
         }
         
         vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
@@ -303,7 +303,7 @@ namespace fly {
                 this->cubemap
             );
 
-            endSingleTimeCommands(vk, commandPool, commandBuffer, QueueType::TRANSFER);
+            endSingleTimeCommands(vk, commandPool, commandBuffer);
         }
 
         vkDestroyBuffer(vk->device, stagingBuffer, nullptr);

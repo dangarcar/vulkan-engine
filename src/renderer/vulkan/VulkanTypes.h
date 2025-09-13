@@ -3,12 +3,9 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <optional>
+#include <mutex>
 
 namespace fly {
-
-    enum class QueueType: int {
-        GRAPHICS = 0, COMPUTE, PRESENT, TRANSFER
-    };
 
     struct VulkanInstance {
         VkInstance instance;
@@ -17,7 +14,8 @@ namespace fly {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkDevice device;
 
-        VkQueue graphicsQueue, computeQueue, presentQueue, transferQueue;
+        VkQueue generalQueue, presentQueue;
+        std::mutex submitMtx;
 
         VkSwapchainKHR swapChain;
         VkFormat swapChainImageFormat;
@@ -27,10 +25,10 @@ namespace fly {
     };
 
     struct QueueFamilyIndices {
-        std::optional<uint32_t> graphicsFamily, computeFamily, presentFamily, transferFamily;
+        std::optional<uint32_t> generalFamily, presentFamily;
     
         bool isComplete() {
-            return graphicsFamily.has_value() && computeFamily.has_value() && presentFamily.has_value() && transferFamily.has_value();
+            return generalFamily.has_value() && presentFamily.has_value();
         }
     };
     

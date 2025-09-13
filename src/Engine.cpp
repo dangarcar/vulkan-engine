@@ -62,6 +62,9 @@ namespace fly {
         while (!window.shouldClose()) {
             auto lastTime = time;
             time = std::chrono::system_clock::now();
+            auto dt = std::chrono::duration<double, std::chrono::seconds::period>(time - lastTime).count();
+            
+            std::cout << 1000 * dt << std::endl;
 
             window.handleInput();
             if(window.keyJustPressed(GLFW_KEY_F11))
@@ -85,7 +88,7 @@ namespace fly {
             ImGui::Begin("Debug");
 
             this->scene->run(
-                std::chrono::duration<double, std::chrono::seconds::period>(time - lastTime).count(), 
+                dt, 
                 this->currentFrame,
                 *this
             );
@@ -145,7 +148,7 @@ namespace fly {
         applyFilters(this->computeCommandBuffers[this->currentFrame], vk->swapChainImages[imageIndex]);
         
         vkResetCommandBuffer(uiRenderer->getCommandBuffer(this->currentFrame), 0);
-        uiRenderer->recordCommandBuffer(imageIndex, this->currentFrame);
+        uiRenderer->recordCommandBuffer(imageIndex, this->currentFrame); //WARNING: this uses the queue without synchronization!!!!
 
         
         std::array<VkSubmitInfo, 3> submitInfos = {};
@@ -184,8 +187,10 @@ namespace fly {
         auto uiSemaphore = uiRenderer->getRenderFinishedSemaphore(this->currentFrame);
         submitInfos[2].pSignalSemaphores = &uiSemaphore;
 
-        if(vkQueueSubmit(vk->graphicsQueue, submitInfos.size(), submitInfos.data(), this->inFlightFences[this->currentFrame]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to submit draw command buffer!");
+        {
+            std::unique_lock<std::mutex> lock(vk->submitMtx);
+            if(vkQueueSubmit(vk->generalQueue, submitInfos.size(), submitInfos.data(), this->inFlightFences[this->currentFrame]) != VK_SUCCESS) 
+                throw std::runtime_error("failed to submit draw queue!");
         }
 
         VkPresentInfoKHR presentInfo{};
@@ -200,7 +205,10 @@ namespace fly {
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
 
-        result = vkQueuePresentKHR(vk->presentQueue, &presentInfo);
+        {
+            std::unique_lock<std::mutex> lock(vk->submitMtx);
+            result = vkQueuePresentKHR(vk->presentQueue, &presentInfo);
+        }
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || this->window.isFramebufferResized()) {
             this->window.resizeFramebuffer();
             recreateSwapChain();
@@ -418,10 +426,8 @@ namespace fly {
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
         std::set<uint32_t> uniqueQueueFamilies = {
-            indices.graphicsFamily.value(), 
-            indices.computeFamily.value(),
-            indices.presentFamily.value(),
-            indices.transferFamily.value(),
+            indices.generalFamily.value(), 
+            indices.presentFamily.value()        
         };
 
         float queuePriorities[] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -429,7 +435,7 @@ namespace fly {
             VkDeviceQueueCreateInfo queueCreateInfo{};
             queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             queueCreateInfo.queueFamilyIndex = queueFamily;
-            queueCreateInfo.queueCount = 4;
+            queueCreateInfo.queueCount = 1;
             queueCreateInfo.pQueuePriorities = queuePriorities;
             queueCreateInfos.push_back(queueCreateInfo);
         }
@@ -460,10 +466,8 @@ namespace fly {
             throw std::runtime_error("failed to create logical device!");
         }
 
-        vkGetDeviceQueue(vk->device, indices.graphicsFamily.value(), 0, &vk->graphicsQueue);
-        vkGetDeviceQueue(vk->device, indices.presentFamily.value(), 1, &vk->presentQueue);
-        vkGetDeviceQueue(vk->device, indices.computeFamily.value(), 2, &vk->computeQueue);
-        vkGetDeviceQueue(vk->device, indices.transferFamily.value(), 3, &vk->transferQueue);
+        vkGetDeviceQueue(vk->device, indices.generalFamily.value(), 0, &vk->generalQueue);
+        vkGetDeviceQueue(vk->device, indices.presentFamily.value(), 0, &vk->presentQueue);
     }
 
     void Engine::createSwapChain() {
