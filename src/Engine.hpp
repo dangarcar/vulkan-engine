@@ -93,9 +93,8 @@ namespace fly {
         std::unique_ptr<UIRenderer> uiRenderer;
 
         uint32_t currentFrame = 0;
-        
         VkDebugUtilsMessengerEXT debugMessenger;
-        
+
         VkRenderPass renderPass;
         
         std::vector<VkFramebuffer> swapChainFramebuffers;
@@ -142,6 +141,8 @@ namespace fly {
         void createFramebuffers();
         void createSyncObjects();
         
+        void drawImguiEngineInfo(double frameTime);
+
         void applyFilters(VkCommandBuffer commandBuffer, VkImage swapchainImage);
 
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);

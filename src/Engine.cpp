@@ -60,12 +60,22 @@ namespace fly {
 
     void Engine::run() {
         auto time = std::chrono::system_clock::now();
-        while (!window.shouldClose()) {
+        double perfTime = 0.0, frameTime = 1.0;
+        int frames = 0;
+
+        while(!window.shouldClose()) {
             auto lastTime = time;
             time = std::chrono::system_clock::now();
             auto dt = std::chrono::duration<double, std::chrono::seconds::period>(time - lastTime).count();
             
-            //std::cout << 1000 * dt << std::endl;
+            frames++;
+            perfTime += dt;
+            if(perfTime >= 0.5) {
+                frameTime = perfTime / frames;
+                frames = 0;
+                perfTime = 0;
+            }
+
 
             window.handleInput();
             if(window.keyJustPressed(GLFW_KEY_F11))
@@ -85,16 +95,21 @@ namespace fly {
             for(auto& pipeline: this->graphicPipelines)
                 pipeline->update(this->currentFrame);
 
+
             uiRenderer->setupFrame();
             ImGui::Begin("Debug");
-
+            drawImguiEngineInfo(frameTime);
+            ImGui::Text("- Scene info");
+            ImGui::Indent();
+            
             this->scene->run(
                 dt, 
                 this->currentFrame,
                 *this
             );
-
+            
             this->uiRenderer->render(this->currentFrame);
+            
             ImGui::End();
             ImGui::Render();
             drawFrame();
@@ -705,6 +720,49 @@ namespace fly {
                 throw std::runtime_error("failed to create synchronization objects for a frame!");
             }
         }
+    }
+
+
+    void Engine::drawImguiEngineInfo(double frameTime) {
+        ImGui::Text("- Engine info");
+        ImGui::Indent();
+        ImGui::LabelText("FPS", "%.03f", 1/frameTime);
+        ImGui::LabelText("Frame time", "%.03fms", frameTime * 1000);
+        ImGui::LabelText("Frame size", "%dpx x %dpx", window.getWidth(), window.getHeight());
+        ImGui::LabelText("Mouse pos", "%d %d", (int)window.getMousePos().x, (int)window.getMousePos().y);
+        ImGui::LabelText("Mouse pos", "%d %d", (int)window.getMousePos().x, (int)window.getMousePos().y);
+
+        std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets;
+        vmaGetHeapBudgets(vk->allocator, budgets.data());
+        double deviceUsage = 0, deviceBudget = 0;
+        VkPhysicalDeviceMemoryProperties prop;
+        vkGetPhysicalDeviceMemoryProperties(vk->physicalDevice, &prop);
+        for(size_t i=0; i<VK_MAX_MEMORY_HEAPS; ++i) {
+            if(prop.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+                deviceUsage += budgets[i].usage;
+                deviceBudget += budgets[i].budget;
+            }
+        }
+        
+        auto deviceRatio = deviceUsage / deviceBudget;
+        ImGui::LabelText("VRAM", "%.1lf / %.1lf MB", deviceUsage / (1 << 20), deviceBudget / (1 << 20));
+        
+        ImVec4 color = {1, 0, 1, 1};
+        if(deviceRatio < 0.5) {
+            auto c = glm::mix(glm::vec4{0,1,0,1}, {1,1,0,1}, deviceRatio*2);
+            color = *((ImVec4*)&c);
+        } else {
+            auto c = glm::mix(glm::vec4{1,1,0,1}, {1,0,0,1}, deviceRatio*2 - 1);
+            color = *((ImVec4*)&c);
+        }
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, color);
+        ImGui::ProgressBar(deviceRatio, ImVec2(0,0));
+        ImGui::PopStyleColor();
+
+        ImGui::Unindent();
+        ImGui::Dummy(ImVec2(0.0f, 5.0f));
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0.0f, 5.0f));
     }
 
 
