@@ -49,9 +49,9 @@ namespace fly {
             this->format, 
             VK_IMAGE_TILING_OPTIMAL, 
             usage, 
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-            this->image, 
-            this->imageMemory,
+            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, 
+            &this->image, 
+            &this->imageAlloc,
             false
         );
         
@@ -158,21 +158,22 @@ namespace fly {
         this->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(this->width, this->height)))) + 1;
         
         VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
+        VmaAllocation stagingAlloc;
+        {
+            VkBufferCreateInfo bufferInfo{};
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.size = imageSize;
+            bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            
+            VmaAllocationCreateInfo allocCreateInfo{};
+            allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+            VmaAllocationInfo stagingAllocInfo;
+            vmaCreateBuffer(vk->allocator, &bufferInfo, &allocCreateInfo, &stagingBuffer, &stagingAlloc, &stagingAllocInfo);
+            memcpy(stagingAllocInfo.pMappedData, pixels, imageSize);
+        }
         
-        createBuffer(
-            vk,
-            imageSize, 
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-            stagingBuffer, 
-            stagingBufferMemory
-        );
-        
-        void* data;
-        vkMapMemory(vk->device, stagingBufferMemory, 0, imageSize, 0, &data);
-        memcpy(data, pixels, static_cast<size_t>(imageSize));
-        vkUnmapMemory(vk->device, stagingBufferMemory);
         
         createImage(
             vk,    
@@ -183,9 +184,9 @@ namespace fly {
             this->format, 
             VK_IMAGE_TILING_OPTIMAL, 
             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-            this->image, 
-            this->imageMemory,
+            0, 
+            &this->image, 
+            &this->imageAlloc,
             this->cubemap
         );
         
@@ -226,29 +227,29 @@ namespace fly {
             endSingleTimeCommands(vk, commandPool, commandBuffer);
         }
         
-        vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
-        vkFreeMemory(vk->device, stagingBufferMemory, nullptr);
+
+        vmaDestroyBuffer(vk->allocator, stagingBuffer, stagingAlloc);
 
         this->imageView = createImageView(vk, this->image, this->format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
     }
 
     void Texture::_createTextureFromKtx2(const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions) {
         VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        
-        createBuffer(
-            vk,
-            texture->dataSize, 
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-            stagingBuffer, 
-            stagingBufferMemory
-        );
-    
-        void* data;
-        vkMapMemory(vk->device, stagingBufferMemory, 0, texture->dataSize, 0, &data);
-        memcpy(data, texture->pData, static_cast<size_t>(texture->dataSize));
-        vkUnmapMemory(vk->device, stagingBufferMemory);
+        VmaAllocation stagingAlloc;
+        {
+            VkBufferCreateInfo bufferInfo{};
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.size = texture->dataSize;
+            bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            
+            VmaAllocationCreateInfo allocCreateInfo{};
+            allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+            VmaAllocationInfo stagingAllocInfo;
+            vmaCreateBuffer(vk->allocator, &bufferInfo, &allocCreateInfo, &stagingBuffer, &stagingAlloc, &stagingAllocInfo);
+            memcpy(stagingAllocInfo.pMappedData, texture->pData, texture->dataSize);
+        }
     
         createImage(
             vk,    
@@ -259,9 +260,9 @@ namespace fly {
             this->format, 
             VK_IMAGE_TILING_OPTIMAL, 
             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-            this->image, 
-            this->imageMemory,
+            0, 
+            &this->image, 
+            &this->imageAlloc,
             this->cubemap
         );
     
@@ -306,8 +307,8 @@ namespace fly {
             endSingleTimeCommands(vk, commandPool, commandBuffer);
         }
 
-        vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
-        vkFreeMemory(vk->device, stagingBufferMemory, nullptr);
+
+        vmaDestroyBuffer(vk->allocator, stagingBuffer, stagingAlloc);
 
         this->imageView = createImageView(vk, this->image, this->format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
     }
@@ -315,8 +316,7 @@ namespace fly {
 
     Texture::~Texture() {
         vkDestroyImageView(vk->device, this->imageView, nullptr);
-        vkDestroyImage(vk->device, this->image, nullptr);
-        vkFreeMemory(vk->device, this->imageMemory, nullptr);
+        vmaDestroyImage(vk->allocator, this->image, this->imageAlloc);
     }
 
     std::unique_ptr<Texture> Texture::copyToFormat(VkFormat newFormat, VkImageUsageFlags usage, VkCommandBuffer commandBuffer) const {

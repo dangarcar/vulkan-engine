@@ -33,8 +33,8 @@ namespace fly {
         
         unsigned meshIndex;
         std::array<VkBuffer, MAX_FRAMES_IN_FLIGHT> buffers;
-        std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> buffersMemory;
-        std::array<void*, MAX_FRAMES_IN_FLIGHT> buffersMapped;
+        std::array<VmaAllocation, MAX_FRAMES_IN_FLIGHT> buffersAlloc;
+        std::array<VmaAllocationInfo, MAX_FRAMES_IN_FLIGHT> buffersInfo;
     };
 
     struct GPUCharacter {

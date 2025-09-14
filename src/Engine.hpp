@@ -20,11 +20,14 @@ namespace fly {
     };
 
     class Engine {
+    private:
+        static inline const char* ENGINE_NAME = "Fly Engine";
+        static inline constexpr uint32_t ENGINE_VERSION = VK_MAKE_VERSION(0, 1, 0);
     public:
         //Creates a fullscreen engine
-        Engine(const char* name): window(name) {}
+        Engine(const char* name): name(name), window(name) {}
         //Creates a windowed engine with given width and height
-        Engine(const char* name, int width, int height): window(name, width, height) {}
+        Engine(const char* name, int width, int height): name(name), window(name, width, height) {}
         ~Engine();
         
         void init();
@@ -80,6 +83,7 @@ namespace fly {
         UIRenderer& getUIRenderer() { return *this->uiRenderer; }
 
     private:
+        const char* name;
         std::unique_ptr<Scene> scene;
 
         std::shared_ptr<VulkanInstance> vk;
@@ -130,6 +134,7 @@ namespace fly {
         void setupDebugMessenger();
         void pickPhysicalDevice();
         void createLogicalDevice();
+        void createVmaAllocator();
         void createSwapChain();
         void createImageViews();
         void createRenderPass();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include <VulkanMemoryAllocator/vk_mem_alloc.h>
 #include <vector>
 #include <optional>
 #include <mutex>
@@ -13,6 +14,8 @@ namespace fly {
 
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkDevice device;
+
+        VmaAllocator allocator;
 
         VkQueue generalQueue, presentQueue;
         std::mutex submitMtx;

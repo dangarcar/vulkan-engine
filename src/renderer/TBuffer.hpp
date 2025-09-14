@@ -2,8 +2,8 @@
 
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanConstants.h"
-#include "vulkan/VulkanHelpers.hpp"
 #include <cstring>
+#include <memory>
 
 namespace fly {
 
@@ -14,23 +14,29 @@ namespace fly {
             VkDeviceSize bufferSize = sizeof(T);
 
             for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-                createBuffer(
-                    this->vk,
-                    bufferSize, 
-                    usage, 
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-                    this->buffers[i], 
-                    this->buffersMemory[i]
+                VkBufferCreateInfo bufferCreateInfo{};
+                bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+                bufferCreateInfo.size = bufferSize;
+                bufferCreateInfo.usage = usage;
+
+                VmaAllocationCreateInfo bufferCreateAllocInfo = {};
+                bufferCreateAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+                bufferCreateAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+                
+                vmaCreateBuffer(
+                    vk->allocator, 
+                    &bufferCreateInfo, 
+                    &bufferCreateAllocInfo, 
+                    &this->buffers[i], 
+                    &this->buffersAlloc[i], 
+                    &this->buffersInfo[i]
                 );
-    
-                vkMapMemory(vk->device, this->buffersMemory[i], 0, bufferSize, 0, &this->buffersMapped[i]);
             }
         }
 
         ~TBuffer() {
             for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-                vkDestroyBuffer(vk->device, this->buffers[i], nullptr);
-                vkFreeMemory(vk->device, this->buffersMemory[i], nullptr);
+                vmaDestroyBuffer(vk->allocator, this->buffers[i], this->buffersAlloc[i]);
             }
         }
 
@@ -39,20 +45,20 @@ namespace fly {
         constexpr size_t getSize() const { return sizeof(T); }
 
         void updateBuffer(const T& value, uint32_t currentFrame) {
-            std::memcpy(this->buffersMapped[currentFrame], &value, sizeof(T));
+            std::memcpy(this->buffersInfo[currentFrame].pMappedData, &value, sizeof(T));
         }
 
         T getBufferValueAsync(uint32_t currentFrame) {
             T value;
-            std::memcpy(&value, this->buffersMapped[currentFrame], sizeof(T));
+            std::memcpy(&value, this->buffersInfo[currentFrame].pMappedData, sizeof(T));
             return value;
         }
 
 
     private:
         std::array<VkBuffer, MAX_FRAMES_IN_FLIGHT> buffers;
-        std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> buffersMemory;
-        std::array<void*, MAX_FRAMES_IN_FLIGHT> buffersMapped;
+        std::array<VmaAllocation, MAX_FRAMES_IN_FLIGHT> buffersAlloc;
+        std::array<VmaAllocationInfo, MAX_FRAMES_IN_FLIGHT> buffersInfo;
     
         std::shared_ptr<VulkanInstance> vk;
 

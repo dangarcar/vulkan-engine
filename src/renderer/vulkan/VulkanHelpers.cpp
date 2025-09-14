@@ -7,40 +7,6 @@
 
 
 namespace fly {
-    
-
-    void createBuffer(
-        std::shared_ptr<VulkanInstance> vk, 
-        VkDeviceSize size, 
-        VkBufferUsageFlags usage, 
-        VkMemoryPropertyFlags properties, 
-        VkBuffer& buffer, 
-        VkDeviceMemory& bufferMemory
-    ) {
-        VkBufferCreateInfo bufferInfo{};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = size;
-        bufferInfo.usage = usage;
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        if(vkCreateBuffer(vk->device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create vertex buffer!");
-        }
-
-        VkMemoryRequirements memRequirements;
-        vkGetBufferMemoryRequirements(vk->device, buffer, &memRequirements);
-
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(vk, memRequirements.memoryTypeBits, properties);
-        
-        if(vkAllocateMemory(vk->device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate vertex buffer memory!");
-        }
-
-        vkBindBufferMemory(vk->device, buffer, bufferMemory, 0);
-    }
 
     
     uint32_t findMemoryType(
@@ -594,9 +560,9 @@ namespace fly {
         VkFormat format, 
         VkImageTiling tiling, 
         VkImageUsageFlags usage, 
-        VkMemoryPropertyFlags properties, 
-        VkImage& image, 
-        VkDeviceMemory& imageMemory,
+        VmaAllocationCreateFlags flags,
+        VkImage *image, 
+        VmaAllocation *allocation,
         bool cubemap
     ) {
         VkImageCreateInfo imageInfo{};
@@ -619,23 +585,15 @@ namespace fly {
             imageInfo.arrayLayers = 1;
         }
     
-        if (vkCreateImage(vk->device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+
+        VmaAllocationCreateInfo allocCreateInfo = {};
+        allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocCreateInfo.flags = flags;
+        if(flags & VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
+            allocCreateInfo.priority = 1.0f;
+
+        if(vmaCreateImage(vk->allocator, &imageInfo, &allocCreateInfo, image, allocation, nullptr) != VK_SUCCESS)
             throw std::runtime_error("failed to create image!");
-        }
-    
-        VkMemoryRequirements memRequirements;
-        vkGetImageMemoryRequirements(vk->device, image, &memRequirements);
-    
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(vk, memRequirements.memoryTypeBits, properties);
-    
-        if (vkAllocateMemory(vk->device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate image memory!");
-        }
-    
-        vkBindImageMemory(vk->device, image, imageMemory, 0);
     }
 
     

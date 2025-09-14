@@ -21,11 +21,11 @@ namespace fly {
     struct TextureRef {
         uint32_t mipLevels;
         VkImage image;
-        VkDeviceMemory imageMemory;
         VkImageView imageView;
+        VmaAllocation imageAlloc;
 
         bool operator==(const TextureRef& tex) const {
-            return mipLevels == tex.mipLevels && image == tex.image && imageView == tex.imageView && imageMemory == tex.imageMemory;
+            return mipLevels == tex.mipLevels && image == tex.image && imageView == tex.imageView && imageAlloc == tex.imageAlloc;
         }
     };
 
@@ -56,7 +56,7 @@ namespace fly {
         bool isCubemap() const { return cubemap; }
 
         const TextureRef toRef() const {
-            return { mipLevels, image, imageMemory, imageView };
+            return { mipLevels, image, imageView, imageAlloc };
         }
 
         std::unique_ptr<Texture> copyToFormat(VkFormat newFormat, VkImageUsageFlags usage, VkCommandBuffer commandBuffer) const;
@@ -64,8 +64,9 @@ namespace fly {
     private:
         uint32_t mipLevels;
         VkImage image;
-        VkDeviceMemory imageMemory;
         VkImageView imageView;
+        VmaAllocation imageAlloc;
+
         uint32_t width, height;
         VkFormat format;
 

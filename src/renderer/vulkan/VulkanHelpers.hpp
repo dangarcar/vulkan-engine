@@ -9,15 +9,6 @@
 namespace fly {
 
     //FUNCTION DECLARATIONS
-    void createBuffer(
-        std::shared_ptr<VulkanInstance> vk, 
-        VkDeviceSize size, 
-        VkBufferUsageFlags usage, 
-        VkMemoryPropertyFlags properties, 
-        VkBuffer& buffer, 
-        VkDeviceMemory& bufferMemory
-    );
-
     uint32_t findMemoryType(
         std::shared_ptr<VulkanInstance> vk, 
         uint32_t typeFilter, 
@@ -131,9 +122,9 @@ namespace fly {
         VkFormat format, 
         VkImageTiling tiling, 
         VkImageUsageFlags usage, 
-        VkMemoryPropertyFlags properties, 
-        VkImage& image, 
-        VkDeviceMemory& imageMemory,
+        VmaAllocationCreateFlags flags,
+        VkImage *image, 
+        VmaAllocation *allocation,
         bool cubemap
     );
 

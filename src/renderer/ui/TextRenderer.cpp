@@ -24,10 +24,8 @@ namespace fly {
             f.sampler.reset();
             f.texture.reset();
 
-            for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-                vkDestroyBuffer(vk->device, f.buffers[i], nullptr);
-                vkFreeMemory(vk->device, f.buffersMemory[i], nullptr);
-            }
+            for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i)
+                vmaDestroyBuffer(vk->allocator, f.buffers[i], f.buffersAlloc[i]);
         }
     }
 
@@ -49,7 +47,7 @@ namespace fly {
             
             this->oldFontInstances.insert({k, v.size()});
 
-            memcpy(this->fonts[k].buffersMapped[currentFrame], &v[0], v.size()*sizeof(GPUCharacter));
+            memcpy(this->fonts[k].buffersInfo[currentFrame].pMappedData, &v[0], v.size()*sizeof(GPUCharacter));
             this->pipeline->setInstanceCount(this->fonts[k].meshIndex, v.size());
         }
 
@@ -178,16 +176,23 @@ namespace fly {
 
         VkDeviceSize bufferSize = sizeof(GPUCharacter) * MAX_CHARS;
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            createBuffer(
-                vk,
-                bufferSize, 
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-                font.buffers[i], 
-                font.buffersMemory[i]
-            );
+            VkBufferCreateInfo bufferCreateInfo{};
+            bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferCreateInfo.size = bufferSize;
+            bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-            vkMapMemory(vk->device, font.buffersMemory[i], 0, bufferSize, 0, &font.buffersMapped[i]);
+            VmaAllocationCreateInfo bufferCreateAllocInfo = {};
+            bufferCreateAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            bufferCreateAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            
+            vmaCreateBuffer(
+                vk->allocator, 
+                &bufferCreateInfo, 
+                &bufferCreateAllocInfo, 
+                &font.buffers[i], 
+                &font.buffersAlloc[i], 
+                &font.buffersInfo[i]
+            );
         }
 
         this->pipeline->updateDescriptorSet(

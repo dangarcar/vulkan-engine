@@ -37,6 +37,7 @@ namespace fly {
 
         pickPhysicalDevice();
         createLogicalDevice();
+        createVmaAllocator();
         createSwapChain();
         createImageViews();
 
@@ -64,7 +65,7 @@ namespace fly {
             time = std::chrono::system_clock::now();
             auto dt = std::chrono::duration<double, std::chrono::seconds::period>(time - lastTime).count();
             
-            std::cout << 1000 * dt << std::endl;
+            //std::cout << 1000 * dt << std::endl;
 
             window.handleInput();
             if(window.keyJustPressed(GLFW_KEY_F11))
@@ -319,9 +320,11 @@ namespace fly {
         
         vkDestroyCommandPool(vk->device, this->commandPool, nullptr);
 
+        vmaDestroyAllocator(vk->allocator);
+
         vkDestroyDevice(vk->device, nullptr);
 
-        if (enableValidationLayers) {
+        if(enableValidationLayers) {
             DestroyDebugUtilsMessengerEXT(vk->instance, this->debugMessenger, nullptr);
         }
 
@@ -337,11 +340,11 @@ namespace fly {
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "Hello Triangle";
+        appInfo.pApplicationName = this->name;
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.pEngineName = "No Engine";
-        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_0;
+        appInfo.pEngineName = ENGINE_NAME;
+        appInfo.engineVersion = ENGINE_VERSION;
+        appInfo.apiVersion = VK_API_VERSION_1_4;
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -468,6 +471,18 @@ namespace fly {
 
         vkGetDeviceQueue(vk->device, indices.generalFamily.value(), 0, &vk->generalQueue);
         vkGetDeviceQueue(vk->device, indices.presentFamily.value(), 0, &vk->presentQueue);
+    }
+
+    void Engine::createVmaAllocator() {
+        VmaAllocatorCreateInfo allocatorCreateInfo = {};
+        allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+        allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
+        allocatorCreateInfo.physicalDevice = vk->physicalDevice;
+        allocatorCreateInfo.device = vk->device;
+        allocatorCreateInfo.instance = vk->instance;
+
+        if(vmaCreateAllocator(&allocatorCreateInfo, &vk->allocator) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create vma allocator!"); 
     }
 
     void Engine::createSwapChain() {

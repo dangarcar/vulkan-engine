@@ -18,11 +18,8 @@ namespace fly {
         }
         
         ~TVertexArray() {
-            vkDestroyBuffer(vk->device, this->indexBuffer, nullptr);
-            vkFreeMemory(vk->device, this->indexBufferMemory, nullptr);
-
-            vkDestroyBuffer(vk->device, this->vertexBuffer, nullptr);
-            vkFreeMemory(vk->device, this->vertexBufferMemory, nullptr);
+            vmaDestroyBuffer(vk->allocator, this->vertexBuffer, this->vertexAlloc);
+            vmaDestroyBuffer(vk->allocator, this->indexBuffer, this->indexAlloc);
         }
 
         VkBuffer getVertexBuffer() const { return vertexBuffer; }
@@ -34,41 +31,43 @@ namespace fly {
     private:
         std::vector<Vertex_t> vertices;
         std::vector<uint32_t> indices;
-        VkBuffer vertexBuffer;
-        VkDeviceMemory vertexBufferMemory;
-        VkBuffer indexBuffer;
-        VkDeviceMemory indexBufferMemory;
+        VkBuffer vertexBuffer, indexBuffer;
+        VmaAllocation vertexAlloc, indexAlloc;
     
         std::shared_ptr<VulkanInstance> vk;
 
     private:
-        void createVertexBuffer(const VkCommandPool commandPool) {
+        void createVertexBuffer(const VkCommandPool commandPool) {            
             VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
             
+            VkBufferCreateInfo bufferInfo{};
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.size = bufferSize;
+            bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+
             VkBuffer stagingBuffer;
-            VkDeviceMemory stagingBufferMemory;
-            createBuffer(
-                vk,
-                bufferSize, 
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-                stagingBuffer, 
-                stagingBufferMemory
-            );
-    
-            void* data;
-            vkMapMemory(vk->device, stagingBufferMemory, 0, bufferSize, 0, &data);
-            memcpy(data, vertices.data(), (size_t) bufferSize);
-            vkUnmapMemory(vk->device, stagingBufferMemory);
-    
-            createBuffer(
-                vk,
-                bufferSize, 
-                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-                this->vertexBuffer, 
-                this->vertexBufferMemory
-            );
+            VmaAllocation stagingAlloc;
+            {
+                VmaAllocationCreateInfo allocCreateInfo{};
+                allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+                allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+                
+                VmaAllocationInfo stagingAllocInfo;
+                vmaCreateBuffer(vk->allocator, &bufferInfo, &allocCreateInfo, &stagingBuffer, &stagingAlloc, &stagingAllocInfo);
+                memcpy(stagingAllocInfo.pMappedData, vertices.data(), bufferSize);                
+            }
+
+
+            {
+                VmaAllocationCreateInfo allocCreateInfo{};
+                allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+                
+                bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;            
+
+                vmaCreateBuffer(vk->allocator, &bufferInfo, &allocCreateInfo, &this->vertexBuffer, &this->vertexAlloc, nullptr);
+            }
+
     
             {
                 auto commandBuffer = beginSingleTimeCommands(vk, commandPool);
@@ -83,52 +82,55 @@ namespace fly {
                 endSingleTimeCommands(vk, commandPool, commandBuffer);
             }
     
-            vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
-            vkFreeMemory(vk->device, stagingBufferMemory, nullptr);
+            vmaDestroyBuffer(vk->allocator, stagingBuffer, stagingAlloc);
         }    
         
         void createIndexBuffer(const VkCommandPool commandPool) {
             VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-    
+            
+            VkBufferCreateInfo bufferInfo{};
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.size = bufferSize;
+            bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+
             VkBuffer stagingBuffer;
-            VkDeviceMemory stagingBufferMemory;
-            createBuffer(
-                vk,
-                bufferSize, 
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-                stagingBuffer, 
-                stagingBufferMemory
-            );
-    
-            void* data;
-            vkMapMemory(vk->device, stagingBufferMemory, 0, bufferSize, 0, &data);
-            memcpy(data, indices.data(), (size_t) bufferSize);
-            vkUnmapMemory(vk->device, stagingBufferMemory);
-    
-            createBuffer(
-                vk,
-                bufferSize, 
-                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-                this->indexBuffer, 
-                this->indexBufferMemory
-            );
+            VmaAllocation stagingAlloc;
+            {
+                VmaAllocationCreateInfo allocCreateInfo{};
+                allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+                allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+                
+                VmaAllocationInfo stagingAllocInfo;
+                vmaCreateBuffer(vk->allocator, &bufferInfo, &allocCreateInfo, &stagingBuffer, &stagingAlloc, &stagingAllocInfo);
+                memcpy(stagingAllocInfo.pMappedData, indices.data(), bufferSize);                
+            }
+
+
+            {
+                VmaAllocationCreateInfo allocCreateInfo{};
+                allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+                
+                bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;            
+
+                vmaCreateBuffer(vk->allocator, &bufferInfo, &allocCreateInfo, &this->indexBuffer, &this->indexAlloc, nullptr);
+            }
+
     
             {
                 auto commandBuffer = beginSingleTimeCommands(vk, commandPool);
+                
                 copyBuffer(
-                    commandBuffer,
-                    
+                    commandBuffer,                    
                     stagingBuffer, 
                     this->indexBuffer, 
                     bufferSize
                 );
+
                 endSingleTimeCommands(vk, commandPool, commandBuffer);
             }
     
-            vkDestroyBuffer(vk->device, stagingBuffer, nullptr);
-            vkFreeMemory(vk->device, stagingBufferMemory, nullptr);
+            vmaDestroyBuffer(vk->allocator, stagingBuffer, stagingAlloc);
         }
     
     };

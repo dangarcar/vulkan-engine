@@ -17,8 +17,9 @@ namespace fly {
         "VK_LAYER_KHRONOS_validation"
     };
     
-    const std::array<const char*, 1> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    const std::array<const char*, 2> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_EXT_MEMORY_BUDGET_EXTENSION_NAME
     };
 
 
