@@ -43,13 +43,14 @@ namespace fly {
 
         createRenderPass();
         
-        this->commandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+        this->drawCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+        this->transferCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         
         createColorAndDepthTextures();
         createFramebuffers();
         
-        this->commandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->commandPool);
-        this->computeCommandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->commandPool);
+        this->commandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->drawCommandPool);
+        this->computeCommandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->drawCommandPool);
         createSyncObjects();
 
         uiRenderer = std::make_unique<UIRenderer>(this->window.getGlfwWindow(), this->vk);
@@ -64,6 +65,10 @@ namespace fly {
         int frames = 0;
 
         while(!window.shouldClose()) {
+            if(scene == nullptr  ||  (nextScene != nullptr && nextSceneReady.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready))
+                switchScene();
+
+            
             auto lastTime = time;
             time = std::chrono::system_clock::now();
             auto dt = std::chrono::duration<double, std::chrono::seconds::period>(time - lastTime).count();
@@ -105,7 +110,8 @@ namespace fly {
             this->scene->run(
                 dt, 
                 this->currentFrame,
-                *this
+                *this,
+                transferCommandPool
             );
             
             this->uiRenderer->render(this->currentFrame);
@@ -333,7 +339,8 @@ namespace fly {
             vkDestroyFence(vk->device, this->inFlightFences[i], nullptr);
         }
         
-        vkDestroyCommandPool(vk->device, this->commandPool, nullptr);
+        vkDestroyCommandPool(vk->device, this->transferCommandPool, nullptr);
+        vkDestroyCommandPool(vk->device, this->drawCommandPool, nullptr);
 
         vmaDestroyAllocator(vk->allocator);
 
@@ -346,6 +353,38 @@ namespace fly {
         vkDestroySurfaceKHR(vk->instance, vk->surface, nullptr);
         vkDestroyInstance(vk->instance, nullptr);
     }
+
+    void Engine::switchScene() {
+        FLY_ASSERT(nextSceneReady.get() == VK_SUCCESS, "The scene loading was not successfully made");
+
+        ScopeTimer t("Scene switching time");
+        vkWaitForFences(vk->device, MAX_FRAMES_IN_FLIGHT, this->inFlightFences.data(), VK_TRUE, UINT64_MAX);
+        
+        this->graphicPipelines = std::move(nextGraphicsPipelines);
+        nextGraphicsPipelines.clear();
+
+        this->filters = std::move(nextFilters);
+        nextFilters.clear();
+
+        this->scene = std::move(this->nextScene);
+        this->nextScene = nullptr;
+    }
+
+    void Engine::startNextSceneLoading() {
+        this->nextSceneReady = std::async(std::launch::async, [this] {
+            FLY_ASSERT(this->nextScene != nullptr, "Next scene is null");
+            
+            try {      
+                this->nextScene->init(*this, this->transferCommandPool);
+            } catch(const std::exception& e) {
+                std::cerr << "ERROR: " << e.what() << std::endl;
+                return VK_ERROR_INITIALIZATION_FAILED;
+            }
+            
+            return VK_SUCCESS;
+        });
+    }
+
 
 
     void Engine::createInstance() {
@@ -638,7 +677,7 @@ namespace fly {
         renderPassInfo.dependencyCount = 1;
         renderPassInfo.pDependencies = &dependency;
 
-        if (vkCreateRenderPass(vk->device, &renderPassInfo, nullptr, &this->renderPass) != VK_SUCCESS) {
+        if(vkCreateRenderPass(vk->device, &renderPassInfo, nullptr, &this->renderPass) != VK_SUCCESS) {
             throw std::runtime_error("failed to create render pass!");
         }
     }
@@ -749,11 +788,11 @@ namespace fly {
         
         ImVec4 color = {1, 0, 1, 1};
         if(deviceRatio < 0.5) {
-            auto c = glm::mix(glm::vec4{0,1,0,1}, {1,1,0,1}, deviceRatio*2);
-            color = *((ImVec4*)&c);
+            auto b = glm::mix(glm::vec4{0,1,0,1}, {1,1,0,1}, deviceRatio*2);
+            color = ImVec4(b.x, b.y, b.z, b.w);
         } else {
-            auto c = glm::mix(glm::vec4{1,1,0,1}, {1,0,0,1}, deviceRatio*2 - 1);
-            color = *((ImVec4*)&c);
+            auto b = glm::mix(glm::vec4{1,1,0,1}, {1,0,0,1}, deviceRatio*2 - 1);
+            color = ImVec4(b.x, b.y, b.z, b.w);
         }
         ImGui::PushStyleColor(ImGuiCol_PlotHistogram, color);
         ImGui::ProgressBar(deviceRatio, ImVec2(0,0));

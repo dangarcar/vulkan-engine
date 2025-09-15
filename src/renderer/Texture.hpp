@@ -41,11 +41,11 @@ namespace fly {
             VkImageAspectFlags aspectFlags
         );
         //Texture obtained from the path given in png, jpeg or bmp
-        Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format);
+        Texture(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format);
         //Ktx texture in bc7 with mipmaps included, they aren't generated
-        Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path ktxPath);
+        Texture(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool, std::filesystem::path ktxPath);
         //Default 2x2 magenta and black texture ready to be sampled
-        Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool);
+        Texture(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool);
         
 
         ~Texture();
@@ -74,8 +74,8 @@ namespace fly {
         bool cubemap = false;
         
     private:
-        void _createTextureFromPixels(const VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize);
-        void _createTextureFromKtx2(const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions);
+        void _createTextureFromPixels(VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize);
+        void _createTextureFromKtx2(VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions);
         
     };
 

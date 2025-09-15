@@ -10,7 +10,7 @@ namespace fly {
     template<typename Vertex_t>
     class TVertexArray {
     public:
-        TVertexArray(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::vector<Vertex_t>&& vertices, std::vector<uint32_t>&& indices): 
+        TVertexArray(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool, std::vector<Vertex_t>&& vertices, std::vector<uint32_t>&& indices): 
             vertices{vertices}, indices{indices}, vk{vk}
         {
             createVertexBuffer(commandPool);
@@ -37,7 +37,7 @@ namespace fly {
         std::shared_ptr<VulkanInstance> vk;
 
     private:
-        void createVertexBuffer(const VkCommandPool commandPool) {            
+        void createVertexBuffer(VkCommandPool commandPool) {            
             VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
             
             VkBufferCreateInfo bufferInfo{};
@@ -85,7 +85,7 @@ namespace fly {
             vmaDestroyBuffer(vk->allocator, stagingBuffer, stagingAlloc);
         }    
         
-        void createIndexBuffer(const VkCommandPool commandPool) {
+        void createIndexBuffer(VkCommandPool commandPool) {
             VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
             
             VkBufferCreateInfo bufferInfo{};

@@ -59,7 +59,7 @@ namespace fly {
     }
 
     //PNG OR JPEG WITH MIPMAP GENERATION
-    Texture::Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format):
+    Texture::Texture(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool, std::filesystem::path path, STB_Format stbFormat, VkFormat format):
         format{format}, vk{vk}, cubemap{false}
     {
         ScopeTimer t(std::format("Texture load {}", path.string())); //TODO: remove timer
@@ -84,7 +84,7 @@ namespace fly {
     }
 
     //DEFAULT TEXTURE
-    Texture::Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool): 
+    Texture::Texture(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool): 
         width{2}, height{2}, format{VK_FORMAT_R8G8B8A8_SRGB}, vk{vk}, cubemap{false}
     {
         uint32_t pixels[4] = { 0xFFFF00FFu, 0xFF000000u, 0xFF000000u, 0xFFFF00FFu };
@@ -92,7 +92,7 @@ namespace fly {
     }
 
     //KTX TEXTURE WITH MIPMAPS INCLUDED IN BC7
-    Texture::Texture(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path ktxPath):
+    Texture::Texture(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool, std::filesystem::path ktxPath):
         vk{vk}
     {
         ScopeTimer t(std::format("KTX Texture {}", ktxPath.string()));
@@ -154,7 +154,7 @@ namespace fly {
         ktxTexture_Destroy(reinterpret_cast<ktxTexture*>(texture));
     }
 
-    void Texture::_createTextureFromPixels(const VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize) {        
+    void Texture::_createTextureFromPixels(VkCommandPool commandPool, void* pixels, VkDeviceSize imageSize) {        
         this->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(this->width, this->height)))) + 1;
         
         VkBuffer stagingBuffer;
@@ -233,7 +233,7 @@ namespace fly {
         this->imageView = createImageView(vk, this->image, this->format, VK_IMAGE_ASPECT_COLOR_BIT, this->mipLevels, this->cubemap);
     }
 
-    void Texture::_createTextureFromKtx2(const VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions) {
+    void Texture::_createTextureFromKtx2(VkCommandPool commandPool, ktxTexture2* texture, const std::vector<VkBufferImageCopy>& regions) {
         VkBuffer stagingBuffer;
         VmaAllocation stagingAlloc;
         {

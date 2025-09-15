@@ -10,7 +10,7 @@ namespace fly {
     template<typename T>
     class TBuffer {
     public:
-        TBuffer(std::shared_ptr<VulkanInstance> vk, VkBufferUsageFlagBits usage): vk{vk} {
+        TBuffer(std::shared_ptr<VulkanInstance> vk, VkBufferUsageFlagBits usage, T value = {}): vk{vk} {
             VkDeviceSize bufferSize = sizeof(T);
 
             for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -31,6 +31,8 @@ namespace fly {
                     &this->buffersAlloc[i], 
                     &this->buffersInfo[i]
                 );
+
+                std::memcpy(this->buffersInfo[i].pMappedData, &value, sizeof(T));
             }
         }
 

@@ -129,6 +129,9 @@ namespace fly {
         std::filesystem::path fontJson,
         VkCommandPool commandPool
     ) {
+        if(this->fonts.contains(fontName))
+            return;
+
         //JSON LOADING
         std::unordered_map<char, FontChar> fontChars;
         std::ifstream file(fontJson);

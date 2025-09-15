@@ -6,7 +6,7 @@
 namespace fly {
 
     //SKYBOX IMPLEMENTATION
-    Skybox::Skybox(Engine& engine, std::unique_ptr<Texture> cubemap, std::unique_ptr<TextureSampler> cubemapSampler): cubemapSampler(std::move(cubemapSampler)),cubemap(std::move(cubemap)) {
+    Skybox::Skybox(Engine& engine, VkCommandPool commandPool, std::unique_ptr<Texture> cubemap, std::unique_ptr<TextureSampler> cubemapSampler): cubemapSampler(std::move(cubemapSampler)),cubemap(std::move(cubemap)) {
         FLY_ASSERT(this->cubemap->isCubemap(), "Skybox texture must be a cubemap!");
 
         this->pipeline = engine.addPipeline<SkyboxPipeline>(true); //Render in the background
@@ -15,7 +15,7 @@ namespace fly {
 
         auto vertices = this->vertices;
         auto indices = this->indices;
-        this->pipeline->attachModel(std::make_unique<SimpleVertexArray>(engine.getVulkanInstance(), engine.getCommandPool(), std::move(vertices), std::move(indices)));
+        this->pipeline->attachModel(std::make_unique<SimpleVertexArray>(engine.getVulkanInstance(), commandPool, std::move(vertices), std::move(indices)));
         this->pipeline->updateDescriptorSet(*this->uniformBuffer, *this->cubemap, *this->cubemapSampler);
     }
 

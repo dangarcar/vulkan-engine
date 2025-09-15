@@ -5,6 +5,7 @@
 #include "renderer/FilterPipeline.hpp"
 
 #include <map>
+#include <future>
 
 namespace fly {
 
@@ -14,8 +15,8 @@ namespace fly {
     
     class Scene {
     public:
-        virtual void init(Engine& engine) = 0;
-        virtual void run(double dt, uint32_t currentFrame, Engine& engine) = 0;
+        virtual void init(Engine& engine, VkCommandPool commandPool) = 0;
+        virtual void run(double dt, uint32_t currentFrame, Engine& engine, VkCommandPool commandPool) = 0;
         virtual ~Scene() {}
     };
 
@@ -35,10 +36,9 @@ namespace fly {
         
         template<typename T, typename ...Args>
         void setScene(Args&&... args) {
-            ScopeTimer t("Scene loading time");
             static_assert(std::is_base_of<Scene, T>::value);
-            this->scene = std::make_unique<T>(std::forward(args)...);
-            this->scene->init(*this);
+            this->nextScene = std::make_unique<T>(std::forward(args)...);
+            startNextSceneLoading();
         }
 
         template<typename T>
@@ -48,9 +48,9 @@ namespace fly {
             auto ptr = pip.get();
             pip->allocate(this->renderPass, this->msaaSamples);
             if(background)
-                graphicPipelines.insert(graphicPipelines.begin(), std::move(pip));
+                nextGraphicsPipelines.insert(nextGraphicsPipelines.begin(), std::move(pip));
             else
-                graphicPipelines.emplace_back(std::move(pip));
+                nextGraphicsPipelines.emplace_back(std::move(pip));
             return ptr;
         }
     
@@ -59,7 +59,7 @@ namespace fly {
             static_assert(std::is_base_of<FilterPipeline, T>::value);
             auto filter = std::make_unique<T>(vk);
             filter->allocate();
-            this->filters.insert(std::make_pair(this->globalFilterId, std::move(filter)));
+            this->nextFilters.insert(std::make_pair(this->globalFilterId, std::move(filter)));
             return this->globalFilterId++;
         }
 
@@ -79,15 +79,15 @@ namespace fly {
         Window& getWindow() { return this->window; }
         const Window& getWindow() const { return this->window; }
         std::shared_ptr<VulkanInstance> getVulkanInstance() const { return this->vk; } 
-        VkCommandPool getCommandPool() const { return this->commandPool; }
         UIRenderer& getUIRenderer() { return *this->uiRenderer; }
 
     private:
         const char* name;
-        std::unique_ptr<Scene> scene;
+        std::unique_ptr<Scene> scene, nextScene;
+        std::future<VkResult> nextSceneReady;
 
         std::shared_ptr<VulkanInstance> vk;
-        VkCommandPool commandPool;
+        VkCommandPool drawCommandPool, transferCommandPool;
 
         Window window;
         std::unique_ptr<UIRenderer> uiRenderer;
@@ -100,7 +100,7 @@ namespace fly {
         std::vector<VkFramebuffer> swapChainFramebuffers;
         std::vector<VkCommandBuffer> commandBuffers, computeCommandBuffers;
         
-        std::vector<std::unique_ptr<IGraphicsPipeline>> graphicPipelines;
+        std::vector<std::unique_ptr<IGraphicsPipeline>> graphicPipelines, nextGraphicsPipelines;
 
         VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
         VkFormat hdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -117,13 +117,16 @@ namespace fly {
             std::unique_ptr<FilterPipeline> pipeline; 
             uint32_t frame; 
         };
-        std::map<uint64_t, std::unique_ptr<FilterPipeline>> filters;
+        std::map<uint64_t, std::unique_ptr<FilterPipeline>> filters, nextFilters;
         std::queue<FilterDetachInfo> filterDetachPending;
         uint64_t globalFilterId = 0;
 
     private:
         void drawFrame();
         void cleanup();
+
+        void startNextSceneLoading();
+        void switchScene();
 
         void recreateSwapChain();
         void cleanupSwapChain();

@@ -59,7 +59,7 @@ In the end you should have this project folder structure:
 
 For this engine it is recommended to create 2d textures or cubemaps with this fly::Texture constructor:
 ``` cpp
-fly::Texture(const fly::VulkanInstance& vk, const VkCommandPool commandPool, std::filesystem::path ktxPath);
+fly::Texture(const fly::VulkanInstance& vk, VkCommandPool commandPool, std::filesystem::path ktxPath);
 ```
 
 This constructor is valid for 2d and cubemaps, but they need to be in ktx2 format with bc7 compression and with the mipmaps included in the image.
