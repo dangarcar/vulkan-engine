@@ -102,7 +102,7 @@ namespace fly {
 
     class TextPipeline: public TGraphicsPipeline<Vertex2D> {
     public:
-        TextPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, false} {}
+        TextPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, false, false} {}
         ~TextPipeline() = default;
 
         void updateDescriptorSet(

@@ -58,8 +58,6 @@ namespace fly {
         VkCommandPool &commandPool
     );
 
-    VkSampleCountFlagBits getMaxUsableSampleCount(const VkPhysicalDevice physicalDevice);
-
 
     //IMAGE
     void generateMipmaps(
@@ -98,8 +96,8 @@ namespace fly {
     void copyImageToBuffer(
         VkCommandBuffer commandBuffer,
         VkImage image, 
-        uint32_t width, 
-        uint32_t height,
+        VkOffset3D imageOffset, 
+        VkExtent3D imageExtent,
         bool cubemap,
         VkBuffer buffer 
     );

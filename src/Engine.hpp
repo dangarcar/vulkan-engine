@@ -46,7 +46,7 @@ namespace fly {
             static_assert(std::is_base_of<IGraphicsPipeline, T>::value);
             auto pip = std::make_unique<T>(this->vk);
             auto ptr = pip.get();
-            pip->allocate(this->renderPass, this->msaaSamples);
+            pip->allocate(this->renderPass);
             if(background)
                 nextGraphicsPipelines.insert(nextGraphicsPipelines.begin(), std::move(pip));
             else
@@ -80,6 +80,7 @@ namespace fly {
         const Window& getWindow() const { return this->window; }
         std::shared_ptr<VulkanInstance> getVulkanInstance() const { return this->vk; } 
         UIRenderer& getUIRenderer() { return *this->uiRenderer; }
+        uint32_t getPickingValue() const { return *static_cast<uint32_t*>(pickingCPUBufferInfo.pMappedData); }
 
     private:
         const char* name;
@@ -102,10 +103,11 @@ namespace fly {
         
         std::vector<std::unique_ptr<IGraphicsPipeline>> graphicPipelines, nextGraphicsPipelines;
 
-        VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-        VkFormat hdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-        std::unique_ptr<Texture> msaaColorTexture, hdrColorTexture;
-        std::unique_ptr<Texture> depthTexture;
+        VkFormat hdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT, pickingFormat = VK_FORMAT_R32_UINT;
+        std::unique_ptr<Texture> hdrColorTexture, depthTexture, pickingTexture;
+        VkBuffer pickingCPUBuffer;
+        VmaAllocation pickingCPUAlloc;
+        VmaAllocationInfo pickingCPUBufferInfo;
 
         std::vector<VkSemaphore> imageAvailableSemaphores, renderFinishedSemaphores;
         std::vector<VkFence> inFlightFences;
@@ -138,8 +140,7 @@ namespace fly {
         void createSwapChain();
         void createImageViews();
         void createRenderPass();
-        void createAttachmentsTextures();
-        void createFramebuffers();
+        void createAttachmentsAndBuffers();
         void createSyncObjects();
         
         void drawImguiEngineInfo(double frameTime);

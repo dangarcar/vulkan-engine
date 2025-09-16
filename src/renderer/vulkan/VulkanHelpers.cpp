@@ -211,7 +211,7 @@ namespace fly {
         VkPhysicalDeviceFeatures supportedFeatures;
         vkGetPhysicalDeviceFeatures(device, &supportedFeatures);        
 
-        return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
+        return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy && supportedFeatures.independentBlend;
     }
 
 
@@ -274,22 +274,6 @@ namespace fly {
         }
 
         return buffers;
-    }
-    
-
-    VkSampleCountFlagBits getMaxUsableSampleCount(const VkPhysicalDevice physicalDevice) {
-        VkPhysicalDeviceProperties physicalDeviceProperties;
-        vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
-    
-        VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
-        if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
-        if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
-        if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
-        if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
-        if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
-        if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
-    
-        return VK_SAMPLE_COUNT_1_BIT;
     }
 
 
@@ -483,8 +467,8 @@ namespace fly {
     void copyImageToBuffer(
         VkCommandBuffer commandBuffer,
         VkImage image, 
-        uint32_t width, 
-        uint32_t height,
+        VkOffset3D imageOffset, 
+        VkExtent3D imageExtent,
         bool cubemap,
         VkBuffer buffer 
     ) {   
@@ -501,12 +485,8 @@ namespace fly {
         else
             region.imageSubresource.layerCount = 1;
 
-        region.imageOffset = {0, 0, 0};
-        region.imageExtent = {
-            width,
-            height,
-            1
-        };
+        region.imageOffset = imageOffset;
+        region.imageExtent = imageExtent;
 
         vkCmdCopyImageToBuffer(
             commandBuffer, 

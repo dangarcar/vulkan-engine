@@ -22,11 +22,11 @@ namespace fly {
         initImgui(window);
 
         auto pipeline2d = std::make_unique<GPipeline2D>(vk);
-        pipeline2d->allocate(uiRenderPass, VK_SAMPLE_COUNT_1_BIT);
+        pipeline2d->allocate(uiRenderPass);
         this->renderer2d.init(std::move(pipeline2d), this->uiCommandPool);
 
         auto textPipeline = std::make_unique<TextPipeline>(vk);
-        textPipeline->allocate(uiRenderPass, VK_SAMPLE_COUNT_1_BIT);
+        textPipeline->allocate(uiRenderPass);
         this->textRenderer.init(std::move(textPipeline));
     }
 

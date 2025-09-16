@@ -19,7 +19,7 @@ namespace fly {
 
     class IGraphicsPipeline {
     public:
-        virtual void allocate(const VkRenderPass renderPass, const VkSampleCountFlagBits msaaSamples) = 0;
+        virtual void allocate(const VkRenderPass renderPass) = 0;
         virtual void recordOnCommandBuffer(VkCommandBuffer commandBuffer, uint32_t currentFrame) = 0;
         virtual void update(uint32_t currentFrame) = 0;
         virtual ~IGraphicsPipeline() {}
@@ -36,7 +36,7 @@ namespace fly {
     template<typename Vertex_t>
     class TGraphicsPipeline : public IGraphicsPipeline {
     public:
-        TGraphicsPipeline(std::shared_ptr<VulkanInstance> vk, bool depthTest): depthTestEnabled(depthTest), vk{vk} {}
+        TGraphicsPipeline(std::shared_ptr<VulkanInstance> vk, bool depthTest, bool deferredRendering): depthTestEnabled(depthTest), deferredRendering(deferredRendering), vk{vk} {}
         virtual ~TGraphicsPipeline() {
             std::vector<unsigned> keys;
             keys.reserve(this->meshes.size());
@@ -63,12 +63,12 @@ namespace fly {
             vkDestroyPipelineLayout(vk->device, this->pipelineLayout, nullptr);
         }
 
-        void allocate(const VkRenderPass renderPass, const VkSampleCountFlagBits msaaSamples) override {
+        void allocate(const VkRenderPass renderPass) override {
             this->descriptorSetLayout = createDescriptorSetLayout();
             
             auto [pipeline, layout] = createGraphicsPipeline(
                 this->vk, this->getVertShaderCode(), this->getFragShaderCode(), 
-                renderPass, this->descriptorSetLayout.layout, msaaSamples, this->depthTestEnabled
+                renderPass, this->descriptorSetLayout.layout, this->depthTestEnabled, this->deferredRendering
             );
             this->graphicsPipeline = pipeline;
             this->pipelineLayout = layout;
@@ -130,7 +130,7 @@ namespace fly {
         }
 
     protected:
-        bool depthTestEnabled;
+        bool depthTestEnabled, deferredRendering;
         struct MeshData {
             std::unique_ptr<TVertexArray<Vertex_t>> vertexArray;
             VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
@@ -163,8 +163,8 @@ namespace fly {
 
             VkRenderPass renderPass,
             VkDescriptorSetLayout descriptorSetLayout,
-            VkSampleCountFlagBits msaaSamples,
-            bool depthTestEnabled
+            bool depthTestEnabled,
+            bool deferredRendering
         ) {
             VkShaderModule vertShaderModule = createShaderModule(vk->device, vertShaderCode);
             VkShaderModule fragShaderModule = createShaderModule(vk->device, fragShaderCode);
@@ -224,7 +224,7 @@ namespace fly {
             VkPipelineMultisampleStateCreateInfo multisampling{};
             multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
             multisampling.sampleShadingEnable = VK_FALSE;
-            multisampling.rasterizationSamples = msaaSamples;
+            multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
             multisampling.minSampleShading = 1.0f; // Optional
             multisampling.pSampleMask = nullptr; // Optional
             multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -249,21 +249,31 @@ namespace fly {
             
         
             VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-            colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-            colorBlendAttachment.blendEnable = VK_TRUE,
-            colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD,
-            colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+            colorBlendAttachment.blendEnable = VK_TRUE;
+            colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+            colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
             colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-                    
+
+            std::vector<VkPipelineColorBlendAttachmentState> blendAttachs = {colorBlendAttachment};
+
+            if(deferredRendering) {
+                VkPipelineColorBlendAttachmentState pickingBlendAttachment{};
+                pickingBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
+                pickingBlendAttachment.blendEnable = VK_FALSE;
+                blendAttachs.push_back(pickingBlendAttachment);
+            }
+
+
             VkPipelineColorBlendStateCreateInfo colorBlending{};
             colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
             colorBlending.logicOpEnable = VK_FALSE;
             colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
-            colorBlending.attachmentCount = 1;
-            colorBlending.pAttachments = &colorBlendAttachment;
+            colorBlending.attachmentCount = blendAttachs.size();
+            colorBlending.pAttachments = blendAttachs.data();
         
         
             std::vector<VkDynamicState> dynamicStates = {

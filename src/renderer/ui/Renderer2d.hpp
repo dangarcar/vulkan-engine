@@ -119,7 +119,7 @@ namespace fly {
 
     class GPipeline2D: public TGraphicsPipeline<Vertex2D> {
     public:
-        GPipeline2D(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, false} {}
+        GPipeline2D(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, false, false} {}
         ~GPipeline2D() = default;
     
         void updateDescriptorSet(

@@ -46,8 +46,7 @@ namespace fly {
         this->drawCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         this->transferCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         
-        createAttachmentsTextures();
-        createFramebuffers();
+        createAttachmentsAndBuffers();
         
         this->commandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->drawCommandPool);
         createSyncObjects();
@@ -234,8 +233,7 @@ namespace fly {
 
         createSwapChain();
         createImageViews();
-        createAttachmentsTextures();
-        createFramebuffers();
+        createAttachmentsAndBuffers();
         uiRenderer->recreateOnNewSwapChain();
 
         tonemapFilter->createResources();
@@ -244,17 +242,18 @@ namespace fly {
     }
 
     void Engine::cleanupSwapChain() {
-        msaaColorTexture.reset();
+        pickingTexture.reset();
         hdrColorTexture.reset();
         depthTexture.reset();
 
-        for(auto framebuffer : this->swapChainFramebuffers) {
-            vkDestroyFramebuffer(vk->device, framebuffer, nullptr);
-        }
+        //TODO: this should not be necessary but it is included in the same function, so :|
+        vmaDestroyBuffer(vk->allocator, this->pickingCPUBuffer, this->pickingCPUAlloc);
 
-        for(auto imageView : vk->swapChainImageViews) {
+        for(auto framebuffer : this->swapChainFramebuffers)
+            vkDestroyFramebuffer(vk->device, framebuffer, nullptr);
+
+        for(auto imageView : vk->swapChainImageViews)
             vkDestroyImageView(vk->device, imageView, nullptr);
-        }
 
         vkDestroySwapchainKHR(vk->device, vk->swapChain, nullptr);
     }
@@ -278,10 +277,11 @@ namespace fly {
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = vk->swapChainExtent;
 
-        std::array<VkClearValue, 2> clearValues{};
+        std::array<VkClearValue, 3> clearValues{};
         clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
         clearValues[1].depthStencil = {1.0f, 0};
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        clearValues[2].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+        renderPassInfo.clearValueCount = clearValues.size();
         renderPassInfo.pClearValues = clearValues.data();
 
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -306,6 +306,21 @@ namespace fly {
         vkCmdEndRenderPass(commandBuffer);
 
 
+        //RETRIEVE PICKING BUFFER DATA
+        glm::ivec2 mousePos = this->window.getMousePos();
+        if(0 <= mousePos.x && mousePos.x < window.getWidth()
+        && 0 <= mousePos.y && mousePos.y < window.getHeight()) {
+            fly::copyImageToBuffer(
+                commandBuffer, 
+                this->pickingTexture->getImage(), 
+                {mousePos.x, mousePos.y, 0}, 
+                {1, 1, 1}, 
+                false, 
+                this->pickingCPUBuffer
+            );
+        }
+
+
         //FILTERS
         auto colorImage = this->hdrColorTexture->getImage();
         for(auto& [id, f]: filters)
@@ -326,7 +341,7 @@ namespace fly {
 
         vkDestroyRenderPass(vk->device, this->renderPass, nullptr);
 
-        for (int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
+        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
             vkDestroySemaphore(vk->device, this->renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(vk->device, this->imageAvailableSemaphores[i], nullptr);
             vkDestroyFence(vk->device, this->inFlightFences[i], nullptr);
@@ -339,9 +354,8 @@ namespace fly {
 
         vkDestroyDevice(vk->device, nullptr);
 
-        if(enableValidationLayers) {
+        if(enableValidationLayers)
             DestroyDebugUtilsMessengerEXT(vk->instance, this->debugMessenger, nullptr);
-        }
 
         vkDestroySurfaceKHR(vk->instance, vk->surface, nullptr);
         vkDestroyInstance(vk->instance, nullptr);
@@ -451,22 +465,21 @@ namespace fly {
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(vk->instance, &deviceCount, nullptr);
 
-        if (deviceCount == 0) {
+        if(deviceCount == 0) {
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
         }
 
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(vk->instance, &deviceCount, devices.data());
 
-        for (const auto& device : devices) {
-            if (isDeviceSuitable(vk->surface, device)) {
+        for(const auto& device : devices) {
+            if(isDeviceSuitable(vk->surface, device)) {
                 vk->physicalDevice = device;
-                this->msaaSamples = getMaxUsableSampleCount(device);
                 break;
             }
         }
 
-        if (vk->physicalDevice == VK_NULL_HANDLE) {
+        if(vk->physicalDevice == VK_NULL_HANDLE) {
             throw std::runtime_error("failed to find a suitable GPU!");
         }
     }
@@ -492,6 +505,7 @@ namespace fly {
 
         VkPhysicalDeviceFeatures deviceFeatures{};
         deviceFeatures.samplerAnisotropy = VK_TRUE;
+        deviceFeatures.independentBlend = VK_TRUE;
         deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
 
         VkDeviceCreateInfo createInfo{};
@@ -599,15 +613,12 @@ namespace fly {
 
     void Engine::createRenderPass() {
         VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = hdrFormat;
-        colorAttachment.samples = this->msaaSamples;
-        
+        colorAttachment.format = this->hdrFormat;
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        
         colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
@@ -615,24 +626,25 @@ namespace fly {
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentDescription colorAttachmentResolve{};
-        colorAttachmentResolve.format = hdrFormat;
-        colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentReference colorAttachmentResolveRef{};
-        colorAttachmentResolveRef.attachment = 2;
-        colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkAttachmentDescription pickingAttachment{};
+        pickingAttachment.format = this->pickingFormat;
+        pickingAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        pickingAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        pickingAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        pickingAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        pickingAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        pickingAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        pickingAttachment.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+        VkAttachmentReference pickingAttachmentRef{};
+        pickingAttachmentRef.attachment = 2;
+        pickingAttachmentRef.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
 
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = findDepthFormat(vk->physicalDevice);
-        depthAttachment.samples = this->msaaSamples;
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -644,13 +656,13 @@ namespace fly {
         depthAttachmentRef.attachment = 1;
         depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-
+        std::array<VkAttachmentReference, 2> colorAttachs = {colorAttachmentRef, pickingAttachmentRef};
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
+        subpass.colorAttachmentCount = colorAttachs.size();
+        subpass.pColorAttachments = colorAttachs.data();
         subpass.pDepthStencilAttachment = &depthAttachmentRef;
-        subpass.pResolveAttachments = &colorAttachmentResolveRef;
+
 
         VkSubpassDependency dependency{};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -660,31 +672,22 @@ namespace fly {
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-        std::array<VkAttachmentDescription, 3> attachments = {colorAttachment, depthAttachment, colorAttachmentResolve};
+        std::array<VkAttachmentDescription, 3> attachments = {colorAttachment, depthAttachment, pickingAttachment};
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.attachmentCount = attachments.size();
         renderPassInfo.pAttachments = attachments.data();
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
         renderPassInfo.dependencyCount = 1;
         renderPassInfo.pDependencies = &dependency;
 
-        if(vkCreateRenderPass(vk->device, &renderPassInfo, nullptr, &this->renderPass) != VK_SUCCESS) {
+        if(vkCreateRenderPass(vk->device, &renderPassInfo, nullptr, &this->renderPass) != VK_SUCCESS)
             throw std::runtime_error("failed to create render pass!");
-        }
     }
 
-    void Engine::createAttachmentsTextures() {
-        this->msaaColorTexture = std::make_unique<Texture>(
-            this->vk, 
-            vk->swapChainExtent.width, vk->swapChainExtent.height, 
-            this->hdrFormat, 
-            this->msaaSamples,
-            VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-            VK_IMAGE_ASPECT_COLOR_BIT
-        );
-        
+    void Engine::createAttachmentsAndBuffers() {        
+        //CREATE ATTACHMENT TEXTURES
         this->hdrColorTexture = std::make_unique<Texture>(
             this->vk, 
             vk->swapChainExtent.width, vk->swapChainExtent.height, 
@@ -694,25 +697,54 @@ namespace fly {
             VK_IMAGE_ASPECT_COLOR_BIT
         );
 
+
         auto depthFormat = findDepthFormat(vk->physicalDevice);
         this->depthTexture = std::make_unique<Texture>(
             this->vk,
             vk->swapChainExtent.width, vk->swapChainExtent.height, 
             depthFormat,
-            this->msaaSamples,
+            VK_SAMPLE_COUNT_1_BIT,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
             VK_IMAGE_ASPECT_DEPTH_BIT
         );
-    }
 
-    void Engine::createFramebuffers() {
+        this->pickingTexture = std::make_unique<Texture>(
+            this->vk, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
+            this->pickingFormat, 
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT
+        );
+    
+
+        //CREATE PICKING BUFFER (CPU SIDE)
+        VkBufferCreateInfo bufferCreateInfo{};
+        bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferCreateInfo.size = sizeof(uint32_t);
+        bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+        VmaAllocationCreateInfo bufferCreateAllocInfo = {};
+        bufferCreateAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        bufferCreateAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+                
+        vmaCreateBuffer(
+            vk->allocator, 
+            &bufferCreateInfo, 
+            &bufferCreateAllocInfo, 
+            &this->pickingCPUBuffer, 
+            &this->pickingCPUAlloc, 
+            &this->pickingCPUBufferInfo
+        );
+    
+
+        //CREATE FRAMEBUFFERS
         this->swapChainFramebuffers.resize(vk->swapChainImageViews.size());
-
         for(size_t i=0; i<vk->swapChainImageViews.size(); i++) {
             std::array<VkImageView, 3> attachments = {
-                this->msaaColorTexture->getImageView(),
+                this->hdrColorTexture->getImageView(),
                 this->depthTexture->getImageView(),
-                this->hdrColorTexture->getImageView()
+                this->pickingTexture->getImageView()
             };
         
             VkFramebufferCreateInfo framebufferInfo{};
@@ -724,11 +756,9 @@ namespace fly {
             framebufferInfo.height = vk->swapChainExtent.height;
             framebufferInfo.layers = 1;
         
-            if (vkCreateFramebuffer(vk->device, &framebufferInfo, nullptr, &this->swapChainFramebuffers[i]) != VK_SUCCESS) {
+            if(vkCreateFramebuffer(vk->device, &framebufferInfo, nullptr, &this->swapChainFramebuffers[i]) != VK_SUCCESS)
                 throw std::runtime_error("failed to create framebuffer!");
-            }
         }
-
     }
 
     void Engine::createSyncObjects() {
