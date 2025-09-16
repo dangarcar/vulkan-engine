@@ -46,11 +46,10 @@ namespace fly {
         this->drawCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         this->transferCommandPool = createCommandPool(this->vk, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         
-        createColorAndDepthTextures();
+        createAttachmentsTextures();
         createFramebuffers();
         
         this->commandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->drawCommandPool);
-        this->computeCommandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->drawCommandPool);
         createSyncObjects();
 
         uiRenderer = std::make_unique<UIRenderer>(this->window.getGlfwWindow(), this->vk);
@@ -166,14 +165,11 @@ namespace fly {
         vkResetCommandBuffer(this->commandBuffers[this->currentFrame], 0);
         this->recordCommandBuffer(this->commandBuffers[this->currentFrame], imageIndex);
         
-        vkResetCommandBuffer(this->computeCommandBuffers[this->currentFrame], 0);
-        applyFilters(this->computeCommandBuffers[this->currentFrame], vk->swapChainImages[imageIndex]);
-        
         vkResetCommandBuffer(uiRenderer->getCommandBuffer(this->currentFrame), 0);
         uiRenderer->recordCommandBuffer(imageIndex, this->currentFrame); //WARNING: this uses the queue without synchronization!!!!
 
         
-        std::array<VkSubmitInfo, 3> submitInfos = {};
+        std::array<VkSubmitInfo, 2> submitInfos = {};
         // Graphics pass
         VkPipelineStageFlags graphicsWaitStage = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
         submitInfos[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -183,31 +179,20 @@ namespace fly {
         submitInfos[0].commandBufferCount = 1;
         submitInfos[0].pCommandBuffers = &this->commandBuffers[this->currentFrame];
         submitInfos[0].signalSemaphoreCount = 1;
-        submitInfos[0].pSignalSemaphores = &this->renderPassFinishedSemaphores[this->currentFrame];
-
-        // Compute pass
-        VkPipelineStageFlags computeWaitStage = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-        submitInfos[1].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfos[1].waitSemaphoreCount = 1;
-        submitInfos[1].pWaitSemaphores = &this->renderPassFinishedSemaphores[this->currentFrame];
-        submitInfos[1].pWaitDstStageMask = &computeWaitStage; 
-        submitInfos[1].commandBufferCount = 1;
-        submitInfos[1].pCommandBuffers = &this->computeCommandBuffers[this->currentFrame];
-        submitInfos[1].signalSemaphoreCount = 1;
-        submitInfos[1].pSignalSemaphores = &this->computePassFinishedSemaphores[this->currentFrame];
+        submitInfos[0].pSignalSemaphores = &this->renderFinishedSemaphores[this->currentFrame];
 
         // UI pass
         VkPipelineStageFlags uiWaitStage = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-        submitInfos[2].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfos[2].waitSemaphoreCount = 1;
-        submitInfos[2].pWaitSemaphores = &this->computePassFinishedSemaphores[this->currentFrame];
-        submitInfos[2].pWaitDstStageMask = &uiWaitStage; 
-        submitInfos[2].commandBufferCount = 1;
+        submitInfos[1].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfos[1].waitSemaphoreCount = 1;
+        submitInfos[1].pWaitSemaphores = &this->renderFinishedSemaphores[this->currentFrame];
+        submitInfos[1].pWaitDstStageMask = &uiWaitStage; 
+        submitInfos[1].commandBufferCount = 1;
         auto uiBuffer = uiRenderer->getCommandBuffer(this->currentFrame);
-        submitInfos[2].pCommandBuffers = &uiBuffer;
-        submitInfos[2].signalSemaphoreCount = 1;
+        submitInfos[1].pCommandBuffers = &uiBuffer;
+        submitInfos[1].signalSemaphoreCount = 1;
         auto uiSemaphore = uiRenderer->getRenderFinishedSemaphore(this->currentFrame);
-        submitInfos[2].pSignalSemaphores = &uiSemaphore;
+        submitInfos[1].pSignalSemaphores = &uiSemaphore;
 
         {
             std::unique_lock<std::mutex> lock(vk->submitMtx);
@@ -249,7 +234,7 @@ namespace fly {
 
         createSwapChain();
         createImageViews();
-        createColorAndDepthTextures();
+        createAttachmentsTextures();
         createFramebuffers();
         uiRenderer->recreateOnNewSwapChain();
 
@@ -280,10 +265,11 @@ namespace fly {
         beginInfo.flags = 0; // Optional
         beginInfo.pInheritanceInfo = nullptr; // Optional
 
-        if(vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+        if(vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
             throw std::runtime_error("failed to begin recording command buffer!");
-        }
 
+
+        //RENDER PASS
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         renderPassInfo.renderPass = this->renderPass;
@@ -319,9 +305,17 @@ namespace fly {
 
         vkCmdEndRenderPass(commandBuffer);
 
-        if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+
+        //FILTERS
+        auto colorImage = this->hdrColorTexture->getImage();
+        for(auto& [id, f]: filters)
+            f->applyFilter(commandBuffer, colorImage, colorImage, this->currentFrame);
+
+        this->tonemapFilter->applyFilter(commandBuffer, colorImage, vk->swapChainImages[imageIndex], this->currentFrame);
+
+
+        if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
             throw std::runtime_error("failed to record command buffer!");
-        }
     }
 
     void Engine::cleanup() {
@@ -333,8 +327,7 @@ namespace fly {
         vkDestroyRenderPass(vk->device, this->renderPass, nullptr);
 
         for (int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            vkDestroySemaphore(vk->device, this->renderPassFinishedSemaphores[i], nullptr);
-            vkDestroySemaphore(vk->device, this->computePassFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(vk->device, this->renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(vk->device, this->imageAvailableSemaphores[i], nullptr);
             vkDestroyFence(vk->device, this->inFlightFences[i], nullptr);
         }
@@ -682,7 +675,7 @@ namespace fly {
         }
     }
 
-    void Engine::createColorAndDepthTextures() {
+    void Engine::createAttachmentsTextures() {
         this->msaaColorTexture = std::make_unique<Texture>(
             this->vk, 
             vk->swapChainExtent.width, vk->swapChainExtent.height, 
@@ -740,8 +733,7 @@ namespace fly {
 
     void Engine::createSyncObjects() {
         this->imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        this->renderPassFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        this->computePassFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        this->renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         this->inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
         VkSemaphoreCreateInfo semaphoreInfo{};
@@ -753,8 +745,7 @@ namespace fly {
     
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
             if (vkCreateSemaphore(vk->device, &semaphoreInfo, nullptr, &this->imageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(vk->device, &semaphoreInfo, nullptr, &this->renderPassFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(vk->device, &semaphoreInfo, nullptr, &this->computePassFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(vk->device, &semaphoreInfo, nullptr, &this->renderFinishedSemaphores[i]) != VK_SUCCESS ||
                 vkCreateFence(vk->device, &fenceInfo, nullptr, &this->inFlightFences[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create synchronization objects for a frame!");
             }
@@ -802,27 +793,6 @@ namespace fly {
         ImGui::Dummy(ImVec2(0.0f, 5.0f));
         ImGui::Separator();
         ImGui::Dummy(ImVec2(0.0f, 5.0f));
-    }
-
-
-    void Engine::applyFilters(VkCommandBuffer commandBuffer, VkImage swapchainImage) {
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        
-        if(vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
-            throw std::runtime_error("failed to begin recording command buffer!");
-
-
-        auto colorImage = this->hdrColorTexture->getImage();
-        for(auto& [id, f]: filters)
-            f->applyFilter(commandBuffer, colorImage, colorImage, this->currentFrame);
-
-
-        this->tonemapFilter->applyFilter(commandBuffer, colorImage, swapchainImage, this->currentFrame);
-
-        if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-            throw std::runtime_error("failed to record compute command buffer!");
     }
 
 }

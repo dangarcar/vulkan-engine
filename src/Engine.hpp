@@ -98,7 +98,7 @@ namespace fly {
         VkRenderPass renderPass;
         
         std::vector<VkFramebuffer> swapChainFramebuffers;
-        std::vector<VkCommandBuffer> commandBuffers, computeCommandBuffers;
+        std::vector<VkCommandBuffer> commandBuffers;
         
         std::vector<std::unique_ptr<IGraphicsPipeline>> graphicPipelines, nextGraphicsPipelines;
 
@@ -107,9 +107,7 @@ namespace fly {
         std::unique_ptr<Texture> msaaColorTexture, hdrColorTexture;
         std::unique_ptr<Texture> depthTexture;
 
-        std::vector<VkSemaphore> imageAvailableSemaphores;
-        std::vector<VkSemaphore> renderPassFinishedSemaphores;
-        std::vector<VkSemaphore> computePassFinishedSemaphores;
+        std::vector<VkSemaphore> imageAvailableSemaphores, renderFinishedSemaphores;
         std::vector<VkFence> inFlightFences;
 
         std::unique_ptr<TonemapFilter> tonemapFilter;
@@ -140,7 +138,7 @@ namespace fly {
         void createSwapChain();
         void createImageViews();
         void createRenderPass();
-        void createColorAndDepthTextures();
+        void createAttachmentsTextures();
         void createFramebuffers();
         void createSyncObjects();
         
