@@ -15,22 +15,47 @@ namespace fly {
     
     class Scene {
     public:
-        virtual void init(Engine& engine, VkCommandPool commandPool) = 0;
-        virtual void run(double dt, uint32_t currentFrame, Engine& engine, VkCommandPool commandPool) = 0;
+        virtual void init(VkCommandPool commandPool) = 0;
+        virtual void run(double dt, uint32_t currentFrame, VkCommandPool commandPool) = 0;
         virtual ~Scene() {}
+    };
+
+    struct EngineCreateInfo {
+        const char* name;
+        bool fullscreen = true;
+        int width = 0, height = 0;
     };
 
     class Engine {
     private:
         static inline const char* ENGINE_NAME = "Fly Engine";
         static inline constexpr uint32_t ENGINE_VERSION = VK_MAKE_VERSION(0, 1, 0);
+    
+        inline static Engine* instance = nullptr;
+        inline static std::mutex instanceMtx = {};
+    
     public:
+        static Engine& get() {
+            return *Engine::instance;
+        }
+
         //Creates a fullscreen engine
-        Engine(const char* name): name(name), window(name) {}
+        Engine(const char* name): name(name), window(name) { 
+            std::unique_lock<std::mutex> lock(Engine::instanceMtx);
+            
+            FLY_ASSERT(Engine::instance == nullptr, "Engine already exists!");
+            instance = this;
+        }
         //Creates a windowed engine with given width and height
-        Engine(const char* name, int width, int height): name(name), window(name, width, height) {}
-        ~Engine();
+        Engine(const char* name, int width, int height): name(name), window(name, width, height) { 
+            std::unique_lock<std::mutex> lock(Engine::instanceMtx);
+            
+            FLY_ASSERT(Engine::instance == nullptr, "Engine already exists!");
+            instance = this;
+        }
         
+        ~Engine();
+
         void init();
         void run();
         

@@ -105,12 +105,7 @@ namespace fly {
             ImGui::Text("- Scene info");
             ImGui::Indent();
             
-            this->scene->run(
-                dt, 
-                this->currentFrame,
-                *this,
-                transferCommandPool
-            );
+            this->scene->run(dt, this->currentFrame, transferCommandPool);
             
             this->uiRenderer->render(this->currentFrame);
             
@@ -127,7 +122,11 @@ namespace fly {
         uiRenderer.reset();
         tonemapFilter.reset();
         cleanup();
+
+        Engine::instance = nullptr;
+        std::cout << "Engine finished successfully!\n";
     }
+
 
     void Engine::removeFilter(uint64_t filterId) {
         FilterDetachInfo info;
@@ -382,7 +381,7 @@ namespace fly {
             FLY_ASSERT(this->nextScene != nullptr, "Next scene is null");
             
             try {      
-                this->nextScene->init(*this, this->transferCommandPool);
+                this->nextScene->init(this->transferCommandPool);
             } catch(const std::exception& e) {
                 std::cerr << "ERROR: " << e.what() << std::endl;
                 return VK_ERROR_INITIALIZATION_FAILED;

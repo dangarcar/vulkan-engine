@@ -21,7 +21,7 @@ namespace fly {
 
                 VmaAllocationCreateInfo bufferCreateAllocInfo = {};
                 bufferCreateAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-                bufferCreateAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+                bufferCreateAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
                 
                 vmaCreateBuffer(
                     vk->allocator, 
@@ -48,12 +48,6 @@ namespace fly {
 
         void updateBuffer(const T& value, uint32_t currentFrame) {
             std::memcpy(this->buffersInfo[currentFrame].pMappedData, &value, sizeof(T));
-        }
-
-        T getBufferValueAsync(uint32_t currentFrame) {
-            T value;
-            std::memcpy(&value, this->buffersInfo[currentFrame].pMappedData, sizeof(T));
-            return value;
         }
 
 

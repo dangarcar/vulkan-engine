@@ -36,7 +36,7 @@ namespace fly {
 
     class Skybox {
     public:
-        Skybox(Engine& engine, VkCommandPool commandPool, std::unique_ptr<Texture> cubemap, std::unique_ptr<TextureSampler> cubemapSampler);
+        Skybox(VkCommandPool commandPool, std::unique_ptr<Texture> cubemap, std::unique_ptr<TextureSampler> cubemapSampler);
         ~Skybox() = default;
     
         void render(uint32_t currentFrame, glm::mat4 projection, glm::mat4 view);
