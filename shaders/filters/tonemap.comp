@@ -2,9 +2,10 @@
 
 layout(binding = 0, rgba16f) uniform readonly image2D inputImage;
 layout(binding = 1, rgba8) uniform writeonly image2D outputImage;
-layout(binding = 2) uniform UBO {
-    float exposure;
-} ubo;
+
+layout(push_constant) uniform TonemapPush {
+    float exposure, invGamma;
+} push;
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
@@ -12,9 +13,7 @@ void main() {
     ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
     vec4 hdrColor = imageLoad(inputImage, texelCoord);
 
-    const float gamma = 2.2;
-
-    vec3 mapped = vec3(1.0) - exp(-vec3(hdrColor) * ubo.exposure);
-    mapped = pow(mapped, vec3(1.0 / gamma));
+    vec3 mapped = vec3(1.0) - exp(-vec3(hdrColor) * push.exposure);
+    mapped = pow(mapped, vec3(push.invGamma));
     imageStore(outputImage, texelCoord, vec4(mapped, 1.0));
 }

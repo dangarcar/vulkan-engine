@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TBuffer.hpp"
+#include "Utils.hpp"
 #include "vulkan/VulkanTypes.h"
 #include "vulkan/VulkanConstants.h"
 
@@ -14,15 +14,16 @@ namespace fly {
     class Texture;
     class TextureSampler;
 
+
     class FilterPipeline {
     public:
         FilterPipeline(std::shared_ptr<VulkanInstance> vk): vk{vk} {}
         virtual ~FilterPipeline();
 
         virtual void allocate(); // Has default implementation, but can be overriden
-        
         virtual void createResources() = 0;
-        virtual void applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, VkImage outputImage, uint32_t currentFrame) = 0;
+        
+        virtual void applyFilter(VkCommandBuffer commandBuffer, VkImage image, uint32_t currentFrame) = 0;
 
     protected:
         virtual std::vector<char> getShaderCode() = 0;
@@ -34,8 +35,11 @@ namespace fly {
         VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
         VkPipeline pipeline = VK_NULL_HANDLE;
-    
+        size_t pushConstantSize = 0;
+
     };
+
+
 
     class GrayscaleFilter: public FilterPipeline {
     private:
@@ -44,7 +48,7 @@ namespace fly {
         GrayscaleFilter(std::shared_ptr<VulkanInstance> vk): FilterPipeline(vk) {}
 
         void createResources() override;
-        void applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, VkImage outputImage, uint32_t currentFrame) override;
+        void applyFilter(VkCommandBuffer commandBuffer, VkImage image, uint32_t currentFrame) override;
 
     private:
         std::unique_ptr<Texture> computeInputImage, computeOutputImage;  
@@ -55,48 +59,26 @@ namespace fly {
 
     };
 
-    class TonemapFilter: public FilterPipeline {
-    private:
-        static constexpr const char* TONEMAP_SHADER_SRC = "vulkan-engine/shaders/filters/bin/tonemap.comp.spv";
-    public:
-        struct UBO {
-            float exposure;
-        };
 
-        TonemapFilter(std::shared_ptr<VulkanInstance> vk): FilterPipeline(vk) {}
-
-        void createResources() override;
-        void applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, VkImage outputImage, uint32_t currentFrame) override;
-        void setUbo(UBO ubo, uint32_t currentFrame);
-
-    private:
-        std::unique_ptr<Texture> computeInputImage, computeOutputImage;
-        std::unique_ptr<TBuffer<UBO>> uniformBuffer;
-        UBO ubo;
-
-    protected:
-        std::vector<char> getShaderCode() override;
-        DescriptorSetLayout createDescriptorSetLayout() override;
-
-    };
 
     class BloomFilter: public FilterPipeline {
     private:
         static constexpr const char* BLOOM_DOWNSAMPLE_SHADER_SRC = "vulkan-engine/shaders/filters/bin/bloom_downsample.comp.spv";
         static constexpr const char* BLOOM_UPSAMPLE_SHADER_SRC = "vulkan-engine/shaders/filters/bin/bloom_upsample.comp.spv";
-        static constexpr int BLOOM_LEVELS = 5;
+        static constexpr int BLOOM_LEVELS = 6;
     public:
         struct UpsamplePush { glm::vec2 invNormCurrResolution, filterRadius; float bloomIntensity; };
-        struct DownsamplePush { glm::vec2 srcTexelSize, invNormCurrResolution; };
+        struct DownsamplePush { glm::vec2 srcTexelSize, invNormCurrResolution; float bloomThreshold; int srcIndex; };
 
         BloomFilter(std::shared_ptr<VulkanInstance> vk): FilterPipeline(vk) {}
         ~BloomFilter() override;
 
         void allocate() override;
         void createResources() override;
-        void applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, VkImage outputImage, uint32_t currentFrame) override;
+        void applyFilter(VkCommandBuffer commandBuffer, VkImage image, uint32_t currentFrame) override;
         void setFilterRadius(glm::vec2 radius) { this->filterRadius = radius; }
         void settBloomIntensity(float bloom) { this->bloomIntensity = bloom; }
+        void settBloomThreshold(float threshold) { this->bloomThreshold = threshold; }
 
     private:
         std::array<std::unique_ptr<fly::TextureSampler>, BLOOM_LEVELS> computeSamplers;
@@ -107,7 +89,7 @@ namespace fly {
         
         std::map<std::pair<int,int>, std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>> descriptorSetMap;
         glm::vec2 filterRadius;
-        float bloomIntensity;
+        float bloomIntensity, bloomThreshold = 0;
 
     protected:
         std::vector<char> getShaderCode() override;
@@ -116,6 +98,41 @@ namespace fly {
     private:
         std::vector<char> getUpsampleShaderCode();
         void updateDescriptorSet(int inputLevel, int outputLevel);    
+
+    };
+
+
+
+    /*
+    This class doesn't need to follow the interface as it is controlled by the engine, but I wanted it to inherit the FilterPipeline behaviour
+    */
+    class Tonemapper: public FilterPipeline {
+    private:
+        static constexpr const char* TONEMAP_SHADER_SRC = "vulkan-engine/shaders/filters/bin/tonemap.comp.spv";
+    public:
+        struct TonemapPush {
+            float exposure, invGamma;
+        };
+
+        Tonemapper(std::shared_ptr<VulkanInstance> vk): FilterPipeline(vk) {
+            this->pushConstantSize = sizeof(TonemapPush);
+        }
+
+        void createResources(std::shared_ptr<Texture> hdrColorTexture);
+        void applyFilter(VkCommandBuffer commandBuffer, VkImage swapchainImage, uint32_t currentFrame) override;
+        void setExposure(float exposure) { this->exposure = exposure; }
+        void setGamma(float gamma) { this->gamma = gamma; }
+        
+        private:
+        std::shared_ptr<Texture> hdrColorTexture;
+        std::unique_ptr<Texture> computeOutputImage;
+        float exposure = 1.0, gamma = 2.2;
+
+        void createResources() override { FLY_ASSERT(0, "YOU MUST NOT USE THIS METHOD!!"); }
+
+    protected:
+        std::vector<char> getShaderCode() override { return readFile(TONEMAP_SHADER_SRC); }
+        DescriptorSetLayout createDescriptorSetLayout() override;
 
     };
 

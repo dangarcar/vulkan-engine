@@ -1,0 +1,39 @@
+#version 450
+
+layout(binding = 0, rgba16f) uniform writeonly image2D outputImage;
+
+layout(binding = 1, rgba16f) uniform readonly image2D albedoSpec;
+layout(binding = 2, rgba16f) uniform readonly image2D positions;
+layout(binding = 3, rgba16f) uniform readonly image2D normals;
+
+layout(binding = 4) uniform UBO {
+    vec4 viewPos;
+    vec4 lightPos, ambientColor;
+} ubo;
+
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+void main() {
+    ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+    vec3 albedo = imageLoad(albedoSpec, texelCoord).rgb;
+    float specularIntensity = imageLoad(albedoSpec, texelCoord).a;
+    vec3 normal = imageLoad(normals, texelCoord).xyz;
+    vec3 pos = imageLoad(positions, texelCoord).xyz;
+
+    vec3 lightDir = normalize(ubo.lightPos.xyz);
+    vec3 viewDir = normalize(ubo.viewPos.xyz - pos);
+    
+    // Diffuse component
+    float diff = max(dot(normal, lightDir), 0.0);
+    vec3 diffuse = vec3(diff);
+    
+    // Specular component (Blinn-Phong)
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(normal, halfwayDir), 0), 32); // 32 is shininess factor
+    vec3 specular = vec3(specularIntensity) * spec;
+
+    bool hasNormal = !all(equal(normal, vec3(0)));
+    vec3 lighting = (hasNormal? (ubo.ambientColor.rgb + diffuse + specular) : vec3(1)) * albedo;
+    imageStore(outputImage, texelCoord, vec4(lighting, 1));
+}

@@ -3,16 +3,14 @@
 #include "Window.hpp"
 #include "renderer/ui/UIRenderer.hpp"
 #include "renderer/FilterPipeline.hpp"
+#include "renderer/DeferredShader.hpp"
+
 
 #include <map>
 #include <future>
 
 namespace fly {
 
-    class Texture;
-    class TextureSampler;
-    class Engine;
-    
     class Scene {
     public:
         virtual void init(VkCommandPool commandPool) = 0;
@@ -84,6 +82,7 @@ namespace fly {
             static_assert(std::is_base_of<FilterPipeline, T>::value);
             auto filter = std::make_unique<T>(vk);
             filter->allocate();
+            filter->createResources();
             this->nextFilters.insert(std::make_pair(this->globalFilterId, std::move(filter)));
             return this->globalFilterId++;
         }
@@ -97,7 +96,8 @@ namespace fly {
             return *ptr;
         }
 
-        TonemapFilter& getTonemapper() { return *this->tonemapFilter; }
+        Tonemapper& getTonemapper() { return *this->tonemapper; }
+        DeferredShader& getDeferredShader() { return *this->deferredShader; }
         void removeFilter(uint64_t filterId);
         void removeFilters();
 
@@ -129,7 +129,7 @@ namespace fly {
         std::vector<std::unique_ptr<IGraphicsPipeline>> graphicPipelines, nextGraphicsPipelines;
 
         VkFormat hdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT, pickingFormat = VK_FORMAT_R32_UINT;
-        std::unique_ptr<Texture> hdrColorTexture, depthTexture, pickingTexture;
+        std::shared_ptr<Texture> hdrColorTexture, depthTexture, pickingTexture, albedoSpecTexture, positionsTexture, normalsTexture;
         VkBuffer pickingCPUBuffer;
         VmaAllocation pickingCPUAlloc;
         VmaAllocationInfo pickingCPUBufferInfo;
@@ -137,7 +137,8 @@ namespace fly {
         std::vector<VkSemaphore> imageAvailableSemaphores, renderFinishedSemaphores;
         std::vector<VkFence> inFlightFences;
 
-        std::unique_ptr<TonemapFilter> tonemapFilter;
+        std::unique_ptr<DeferredShader> deferredShader;
+        std::unique_ptr<Tonemapper> tonemapper;
         struct FilterDetachInfo { 
             std::unique_ptr<FilterPipeline> pipeline; 
             uint32_t frame; 

@@ -158,9 +158,8 @@ namespace fly {
 
         vkCmdEndRenderPass(commandBuffer);
         
-        if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
             throw std::runtime_error("failed to record UI command buffer!");
-        }
     }
 
     void UIRenderer::createDescriptorPool() {
@@ -225,9 +224,8 @@ namespace fly {
         info.dependencyCount = 1;
         info.pDependencies = &dependency;
         
-        if (vkCreateRenderPass(vk->device, &info, nullptr, &this->uiRenderPass) != VK_SUCCESS) {
+        if(vkCreateRenderPass(vk->device, &info, nullptr, &this->uiRenderPass) != VK_SUCCESS)
             throw std::runtime_error("could not create UI render pass");
-        }
     }
 
     void UIRenderer::createFramebuffers() {

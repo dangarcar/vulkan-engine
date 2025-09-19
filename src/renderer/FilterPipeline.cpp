@@ -21,12 +21,10 @@ namespace fly {
         this->descriptorSetLayout = createDescriptorSetLayout();
         this->descriptorPool = createDescriptorPoolWithLayout(this->descriptorSetLayout, this->vk);
         
-        auto [pip, lay] = createComputePipeline(vk, this->descriptorSetLayout.layout, getShaderCode(), 0);
+        auto [pip, lay] = createComputePipeline(vk, this->descriptorSetLayout.layout, getShaderCode(), this->pushConstantSize);
         this->pipeline = pip;
         this->pipelineLayout = lay;
         this->descriptorSets = allocateDescriptorSets(vk, this->descriptorSetLayout.layout, this->descriptorPool);
-
-        createResources();
     }
 
 
@@ -91,18 +89,15 @@ namespace fly {
         }
     }
 
-    void GrayscaleFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, [[maybe_unused]] VkImage outputImage, uint32_t currentFrame) {
-        FLY_ASSERT(inputImage == outputImage, "Input image is not equal to output image");
-        auto swapchainImage = inputImage;
-
-        //swapchain image from color attach to transfer src
+    void GrayscaleFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage image, uint32_t currentFrame) {
+        //swapchain image from transfer dst to transfer src
         transitionImageLayout(
-            commandBuffer, swapchainImage,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            commandBuffer, image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
             VK_ACCESS_TRANSFER_READ_BIT,
             1, false
         );
@@ -127,7 +122,7 @@ namespace fly {
 
         vkCmdCopyImage(
             commandBuffer,
-            swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             computeInputImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &copyRegion
         );
@@ -185,7 +180,7 @@ namespace fly {
 
         //swapchain image from transfer src to transfer dst
         transitionImageLayout(
-            commandBuffer, swapchainImage,
+            commandBuffer, image,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -198,51 +193,23 @@ namespace fly {
         vkCmdCopyImage(
             commandBuffer,
             computeOutputImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &copyRegion
         );
-
-        //swapchain image from transfer dst to color attach
-        transitionImageLayout(
-            commandBuffer, swapchainImage,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            1, false
-        );
     }
+
 
 
     //TONEMAP FILTER IMPLEMENTATION
-    std::vector<char> TonemapFilter::getShaderCode() {
-        return readFile(TONEMAP_SHADER_SRC);
-    }
-
-    void TonemapFilter::setUbo(UBO ubo, uint32_t currentFrame) {
-        this->uniformBuffer->updateBuffer(ubo, currentFrame);
-    }
-
-    DescriptorSetLayout TonemapFilter::createDescriptorSetLayout() {
+    DescriptorSetLayout Tonemapper::createDescriptorSetLayout() {
         return newDescriptorSetBuild(MAX_FRAMES_IN_FLIGHT, {
             {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT}
         }).build(vk);
     }
 
-    void TonemapFilter::createResources() {
-        this->computeInputImage = std::make_unique<Texture>(
-            this->vk, 
-            vk->swapChainExtent.width, vk->swapChainExtent.height, 
-            VK_FORMAT_R16G16B16A16_SFLOAT, 
-            VK_SAMPLE_COUNT_1_BIT,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-            VK_IMAGE_ASPECT_COLOR_BIT
-        );
-
+    void Tonemapper::createResources(std::shared_ptr<Texture> hdrColorTexture) {
+        this->hdrColorTexture = hdrColorTexture;
         this->computeOutputImage = std::make_unique<Texture>(
             this->vk, 
             vk->swapChainExtent.width, vk->swapChainExtent.height, 
@@ -252,24 +219,16 @@ namespace fly {
             VK_IMAGE_ASPECT_COLOR_BIT
         );
 
-        this->uniformBuffer = std::make_unique<TBuffer<UBO>>(vk, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
             VkDescriptorImageInfo inputImageInfo{};
             inputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            inputImageInfo.imageView = this->computeInputImage->getImageView();
+            inputImageInfo.imageView = this->hdrColorTexture->getImageView();
 
             VkDescriptorImageInfo outputImageInfo{};
             outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
             outputImageInfo.imageView = this->computeOutputImage->getImageView();
 
-            VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = uniformBuffer->getBuffer(i);
-            bufferInfo.offset = 0;
-            bufferInfo.range = uniformBuffer->getSize();
-
-            std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
+            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = this->descriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
@@ -286,59 +245,14 @@ namespace fly {
             descriptorWrites[1].descriptorCount = 1;
             descriptorWrites[1].pImageInfo = &outputImageInfo;
 
-            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[2].dstSet = this->descriptorSets[i];
-            descriptorWrites[2].dstBinding = 2;
-            descriptorWrites[2].dstArrayElement = 0;
-            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descriptorWrites[2].descriptorCount = 1;
-            descriptorWrites[2].pBufferInfo = &bufferInfo;
-
             vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
-    void TonemapFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, VkImage outputImage, uint32_t currentFrame) {
-        //input image from color attach to transfer src
+    void Tonemapper::applyFilter(VkCommandBuffer commandBuffer, VkImage swapchainImage, uint32_t currentFrame) {
+        //input image from transfer dst to general
         transitionImageLayout(
-            commandBuffer, inputImage,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_ACCESS_TRANSFER_READ_BIT,
-            1, false
-        );
-
-        //compute input image from undef to transfer dst
-        transitionImageLayout(
-            commandBuffer, computeInputImage->getImage(),
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            1, false
-        );
-
-        // Copy from input image to compute input
-        VkImageCopy copyRegion{};
-        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.extent = {vk->swapChainExtent.width, vk->swapChainExtent.height, 1};
-
-        vkCmdCopyImage(
-            commandBuffer,
-            inputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            computeInputImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &copyRegion
-        );
-
-        //compute input image from transfer dst to general
-        transitionImageLayout(
-            commandBuffer, computeInputImage->getImage(),
+            commandBuffer, this->hdrColorTexture->getImage(),
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -347,7 +261,7 @@ namespace fly {
             VK_ACCESS_SHADER_READ_BIT,
             1, false
         );
-
+        
         //compute output image from undef to general
         transitionImageLayout(
             commandBuffer, computeOutputImage->getImage(),
@@ -360,6 +274,7 @@ namespace fly {
             1, false
         );
 
+
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, this->pipeline);
         vkCmdBindDescriptorSets(
             commandBuffer, 
@@ -371,9 +286,20 @@ namespace fly {
             0, 
             nullptr
         );
+
+        TonemapPush constants = {this->exposure, 1 / this->gamma};
+        vkCmdPushConstants(
+            commandBuffer, 
+            this->pipelineLayout, 
+            VK_SHADER_STAGE_COMPUTE_BIT, 
+            0, sizeof(TonemapPush), 
+            &constants
+        );
+
         uint32_t groupCountX = (vk->swapChainExtent.width + 15) / 16;
         uint32_t groupCountY = (vk->swapChainExtent.height + 15) / 16;
         vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
+
 
         //compute output image from general to transfer src
         transitionImageLayout(
@@ -387,9 +313,10 @@ namespace fly {
             1, false
         );
 
+
         //swapchain image from undef to transfer dst
         transitionImageLayout(
-            commandBuffer, outputImage,
+            commandBuffer, swapchainImage,
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -399,16 +326,21 @@ namespace fly {
             1, false
         );
 
+
+        VkImageCopy copyRegion{};
+        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copyRegion.extent = {vk->swapChainExtent.width, vk->swapChainExtent.height, 1};
         vkCmdCopyImage(
             commandBuffer,
             computeOutputImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            outputImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &copyRegion
         );
 
-        //swapchain image from transfer dst to color attach
+        //swapchain image from transfer dst to color attachment
         transitionImageLayout(
-            commandBuffer, outputImage,
+            commandBuffer, swapchainImage,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -418,6 +350,7 @@ namespace fly {
             1, false
         );
     }
+
 
 
     //BLOOM IMPLEMENTATION
@@ -459,8 +392,6 @@ namespace fly {
         
         for(int i=BLOOM_LEVELS-1; i>0; --i)
             this->descriptorSetMap[{i, i-1}] = allocateDescriptorSets(vk, this->descriptorSetLayout.layout, this->descriptorPool);
-
-        createResources();
     }
 
     void BloomFilter::createResources() {
@@ -479,11 +410,11 @@ namespace fly {
                 VK_IMAGE_ASPECT_COLOR_BIT
             );
 
-            this->computeSamplers[i] = std::make_unique<TextureSampler>(this->vk, computeImages[i]->getMipLevels());
+            this->computeSamplers[i] = std::make_unique<TextureSampler>(this->vk, computeImages[i]->getMipLevels(), TextureSampler::Filter::LINEAR);
             this->computeImageSizes[i] = {width, height};
         
-            width /= 2;
-            height /= 2;
+            width = (width + 1) / 2;
+            height = (height + 1) / 2;
         }
 
         for(int i=1; i<BLOOM_LEVELS; ++i) {
@@ -534,18 +465,15 @@ namespace fly {
         }
     }
 
-    void BloomFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage inputImage, [[maybe_unused]] VkImage outputImage, uint32_t currentFrame) {
-        FLY_ASSERT(inputImage == outputImage && "Input image is not equal to output image");
-        auto swapchainImage = inputImage;
-
-        //swapchain image from color attach to transfer src
+    void BloomFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage image, uint32_t currentFrame) {
+        //swapchain image from undef to transfer src
         transitionImageLayout(
-            commandBuffer, swapchainImage,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            commandBuffer, image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
             VK_ACCESS_TRANSFER_READ_BIT,
             1, false
         );
@@ -570,7 +498,7 @@ namespace fly {
 
         vkCmdCopyImage(
             commandBuffer,
-            swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             computeImages[0]->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &copyRegion
         );
@@ -616,7 +544,12 @@ namespace fly {
             
             auto srcTexelSize = glm::vec2(1.0) / this->computeImageSizes[i-1];
             auto invNormCurrResolution = glm::vec2(1.0) / (this->computeImageSizes[i] - glm::vec2(1.0));
-            DownsamplePush constants {srcTexelSize, invNormCurrResolution};
+            DownsamplePush constants {
+                srcTexelSize, 
+                invNormCurrResolution, 
+                this->bloomThreshold, 
+                i-1
+            };
             vkCmdPushConstants(
                 commandBuffer, 
                 this->pipelineLayout, 
@@ -707,7 +640,7 @@ namespace fly {
 
         //swapchain image from transfer src to transfer dst
         transitionImageLayout(
-            commandBuffer, swapchainImage,
+            commandBuffer, image,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -720,20 +653,8 @@ namespace fly {
         vkCmdCopyImage(
             commandBuffer,
             computeImages[0]->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &copyRegion
-        );
-
-        //swapchain image from transfer dst to color attach
-        transitionImageLayout(
-            commandBuffer, swapchainImage,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            1, false
         );
     }
 

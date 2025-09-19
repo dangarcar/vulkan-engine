@@ -2,10 +2,18 @@
 
 layout(binding = 0) uniform sampler2D inputSampler;
 layout(binding = 1, rgba16f) uniform writeonly image2D outputImage;
-layout(push_constant) uniform DownsamplePush {
-	vec2 srcTexelSize;
-	vec2 invNormCurrResolution;
+layout(push_constant) uniform DownsamplePush { 
+    vec2 srcTexelSize, invNormCurrResolution; 
+    float bloomThreshold; 
+    int srcIndex; 
 } push;
+
+vec3 prefilter(vec3 c) {
+	float brightness = max(c.r, max(c.g, c.b));
+	float contribution = max(0, brightness - push.bloomThreshold);
+	contribution /= max(brightness, 0.00001);
+	return c * contribution;
+}
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 void main() {
@@ -36,6 +44,9 @@ void main() {
     down += (b+d+f+h)*0.0625;
     down += (j+k+l+m)*0.125;
     down = max(down, 0.0001);
+
+    if(push.srcIndex == 0)
+        down = prefilter(down);
 
     vec4 outColor = vec4(down, 1.0);
     imageStore(outputImage, texelCoord, outColor);

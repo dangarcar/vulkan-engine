@@ -53,8 +53,12 @@ namespace fly {
 
         uiRenderer = std::make_unique<UIRenderer>(this->window.getGlfwWindow(), this->vk);
 
-        this->tonemapFilter = std::make_unique<TonemapFilter>(vk);
-        this->tonemapFilter->allocate();
+        this->tonemapper = std::make_unique<Tonemapper>(vk);
+        this->tonemapper->allocate();
+        this->tonemapper->createResources(this->hdrColorTexture);
+
+        this->deferredShader = std::make_unique<DeferredShader>(vk);
+        this->deferredShader->updateShader(hdrColorTexture, albedoSpecTexture, positionsTexture, normalsTexture);
     }
 
     void Engine::run() {
@@ -120,7 +124,7 @@ namespace fly {
 
         scene.reset();
         uiRenderer.reset();
-        tonemapFilter.reset();
+        tonemapper.reset();
         cleanup();
 
         Engine::instance = nullptr;
@@ -234,8 +238,10 @@ namespace fly {
         createImageViews();
         createAttachmentsAndBuffers();
         uiRenderer->recreateOnNewSwapChain();
-
-        tonemapFilter->createResources();
+        
+        deferredShader->updateShader(hdrColorTexture, albedoSpecTexture, positionsTexture, normalsTexture);
+        
+        tonemapper->createResources(hdrColorTexture);
         for(auto& [id, f]: filters)
             f->createResources();
     }
@@ -244,6 +250,9 @@ namespace fly {
         pickingTexture.reset();
         hdrColorTexture.reset();
         depthTexture.reset();
+        albedoSpecTexture.reset();
+        positionsTexture.reset();
+        normalsTexture.reset();
 
         //TODO: this should not be necessary but it is included in the same function, so :|
         vmaDestroyBuffer(vk->allocator, this->pickingCPUBuffer, this->pickingCPUAlloc);
@@ -276,10 +285,12 @@ namespace fly {
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = vk->swapChainExtent;
 
-        std::array<VkClearValue, 3> clearValues{};
+        std::array<VkClearValue, 5> clearValues{};
         clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-        clearValues[1].depthStencil = {1.0f, 0};
+        clearValues[1].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
         clearValues[2].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+        clearValues[3].depthStencil = {1.0f, 0};
+        clearValues[4].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
         renderPassInfo.clearValueCount = clearValues.size();
         renderPassInfo.pClearValues = clearValues.data();
 
@@ -320,12 +331,17 @@ namespace fly {
         }
 
 
-        //FILTERS
-        auto colorImage = this->hdrColorTexture->getImage();
-        for(auto& [id, f]: filters)
-            f->applyFilter(commandBuffer, colorImage, colorImage, this->currentFrame);
+        //DO THE DEFERRED SHADING
+        deferredShader->run(commandBuffer, this->currentFrame);
 
-        this->tonemapFilter->applyFilter(commandBuffer, colorImage, vk->swapChainImages[imageIndex], this->currentFrame);
+
+        //FILTERS
+        for(auto& [id, f]: filters)
+            f->applyFilter(commandBuffer, this->hdrColorTexture->getImage(), this->currentFrame);
+
+        
+        //TONEMAPPING (from rgb16 to rgb8)
+        tonemapper->applyFilter(commandBuffer, vk->swapChainImages[imageIndex], this->currentFrame);
 
 
         if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -337,6 +353,7 @@ namespace fly {
 
         graphicPipelines.clear();
         filters.clear();
+        deferredShader.reset();
 
         vkDestroyRenderPass(vk->device, this->renderPass, nullptr);
 
@@ -611,35 +628,27 @@ namespace fly {
     }
 
     void Engine::createRenderPass() {
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = this->hdrFormat;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkAttachmentDescription albedoAttachment{};
+        albedoAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+        albedoAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        albedoAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        albedoAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        albedoAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        albedoAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        albedoAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        albedoAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-        VkAttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkAttachmentReference albedoAttachmentRef{};
+        albedoAttachmentRef.attachment = 0;
+        albedoAttachmentRef.layout = VK_IMAGE_LAYOUT_GENERAL;
 
+        auto positionsAttachment = albedoAttachment;
+        auto positionsAttachmentRef = albedoAttachmentRef;
+        positionsAttachmentRef.attachment = 1;
 
-        VkAttachmentDescription pickingAttachment{};
-        pickingAttachment.format = this->pickingFormat;
-        pickingAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        pickingAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        pickingAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        pickingAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        pickingAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        pickingAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        pickingAttachment.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-
-        VkAttachmentReference pickingAttachmentRef{};
-        pickingAttachmentRef.attachment = 2;
-        pickingAttachmentRef.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-
+        auto normalsAttachment = albedoAttachment;
+        auto normalsAttachmentRef = albedoAttachmentRef;
+        normalsAttachmentRef.attachment = 2;
 
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = findDepthFormat(vk->physicalDevice);
@@ -652,10 +661,25 @@ namespace fly {
         depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.attachment = 3;
         depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-        std::array<VkAttachmentReference, 2> colorAttachs = {colorAttachmentRef, pickingAttachmentRef};
+        VkAttachmentDescription pickingAttachment{};
+        pickingAttachment.format = this->pickingFormat;
+        pickingAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        pickingAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        pickingAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        pickingAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        pickingAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        pickingAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        pickingAttachment.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+        VkAttachmentReference pickingAttachmentRef{};
+        pickingAttachmentRef.attachment = 4;
+        pickingAttachmentRef.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+
+        std::array<VkAttachmentReference, 4> colorAttachs = {albedoAttachmentRef, positionsAttachmentRef, normalsAttachmentRef, pickingAttachmentRef};
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = colorAttachs.size();
@@ -671,7 +695,7 @@ namespace fly {
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-        std::array<VkAttachmentDescription, 3> attachments = {colorAttachment, depthAttachment, pickingAttachment};
+        std::array<VkAttachmentDescription, 5> attachments = {albedoAttachment, positionsAttachment, normalsAttachment, depthAttachment, pickingAttachment};
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = attachments.size();
@@ -687,18 +711,35 @@ namespace fly {
 
     void Engine::createAttachmentsAndBuffers() {        
         //CREATE ATTACHMENT TEXTURES
-        this->hdrColorTexture = std::make_unique<Texture>(
+        this->albedoSpecTexture = std::make_shared<Texture>(
             this->vk, 
             vk->swapChainExtent.width, vk->swapChainExtent.height, 
-            this->hdrFormat, 
+            VK_FORMAT_R16G16B16A16_SFLOAT, 
             VK_SAMPLE_COUNT_1_BIT,
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT
         );
 
+        this->positionsTexture = std::make_shared<Texture>(
+            this->vk, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
+            VK_FORMAT_R16G16B16A16_SFLOAT, 
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT
+        );
+
+        this->normalsTexture = std::make_shared<Texture>(
+            this->vk, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
+            VK_FORMAT_R16G16B16A16_SFLOAT, 
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT
+        );
 
         auto depthFormat = findDepthFormat(vk->physicalDevice);
-        this->depthTexture = std::make_unique<Texture>(
+        this->depthTexture = std::make_shared<Texture>(
             this->vk,
             vk->swapChainExtent.width, vk->swapChainExtent.height, 
             depthFormat,
@@ -707,7 +748,7 @@ namespace fly {
             VK_IMAGE_ASPECT_DEPTH_BIT
         );
 
-        this->pickingTexture = std::make_unique<Texture>(
+        this->pickingTexture = std::make_shared<Texture>(
             this->vk, 
             vk->swapChainExtent.width, vk->swapChainExtent.height, 
             this->pickingFormat, 
@@ -715,7 +756,15 @@ namespace fly {
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT
         );
-    
+
+        this->hdrColorTexture = std::make_shared<Texture>(
+            this->vk, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
+            this->hdrFormat, 
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT
+        );
 
         //CREATE PICKING BUFFER (CPU SIDE)
         VkBufferCreateInfo bufferCreateInfo{};
@@ -740,8 +789,10 @@ namespace fly {
         //CREATE FRAMEBUFFERS
         this->swapChainFramebuffers.resize(vk->swapChainImageViews.size());
         for(size_t i=0; i<vk->swapChainImageViews.size(); i++) {
-            std::array<VkImageView, 3> attachments = {
-                this->hdrColorTexture->getImageView(),
+            std::array<VkImageView, 5> attachments = {
+                this->albedoSpecTexture->getImageView(),
+                this->positionsTexture->getImageView(),
+                this->normalsTexture->getImageView(),
                 this->depthTexture->getImageView(),
                 this->pickingTexture->getImageView()
             };

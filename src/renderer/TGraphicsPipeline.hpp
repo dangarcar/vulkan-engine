@@ -247,24 +247,39 @@ namespace fly {
                 depthStencil.back = {}; // Optional
             }
             
-        
-            VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-            colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            colorBlendAttachment.blendEnable = VK_TRUE;
-            colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-            colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 
-            std::vector<VkPipelineColorBlendAttachmentState> blendAttachs = {colorBlendAttachment};
-
+            std::vector<VkPipelineColorBlendAttachmentState> blendAttachs;
             if(deferredRendering) {
+                VkPipelineColorBlendAttachmentState albedoBlendAttachment{};
+                albedoBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+                albedoBlendAttachment.blendEnable = VK_FALSE;
+                blendAttachs.push_back(albedoBlendAttachment);
+                
+                VkPipelineColorBlendAttachmentState positionsBlendAttachment{};
+                positionsBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+                positionsBlendAttachment.blendEnable = VK_FALSE;
+                blendAttachs.push_back(positionsBlendAttachment);
+                
+                VkPipelineColorBlendAttachmentState normalsBlendAttachment{};
+                normalsBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+                normalsBlendAttachment.blendEnable = VK_FALSE;
+                blendAttachs.push_back(normalsBlendAttachment);
+
                 VkPipelineColorBlendAttachmentState pickingBlendAttachment{};
                 pickingBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
                 pickingBlendAttachment.blendEnable = VK_FALSE;
                 blendAttachs.push_back(pickingBlendAttachment);
+            } else {
+                VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+                colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+                colorBlendAttachment.blendEnable = VK_TRUE;
+                colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+                colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+                colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+                colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+                blendAttachs.push_back(colorBlendAttachment);
             }
 
 
