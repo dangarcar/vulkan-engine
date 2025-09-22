@@ -61,6 +61,39 @@ namespace fly {
 
 
 
+    class FxaaFilter: public FilterPipeline {
+    private:
+        static constexpr const char* FXAA_SHADER_SRC = "vulkan-engine/shaders/filters/bin/fxaa.comp.spv";
+    public:
+        struct FxaaPush {
+            glm::vec2 screenSize; 
+            float spanMax, reduceMul, reduceMin;
+        };
+
+        FxaaFilter(std::shared_ptr<VulkanInstance> vk): FilterPipeline(vk) {
+            this->pushConstantSize = sizeof(FxaaPush);
+        }
+
+        void createResources() override;
+        void applyFilter(VkCommandBuffer commandBuffer, VkImage image, uint32_t currentFrame) override;
+    
+        void setSpanMax(float spanMax) { this->spanMax = spanMax; }
+        void setReduceMul(float reduceMul) { this->reduceMul = reduceMul; }
+        void setReduceMin(float reduceMin) { this->reduceMin = reduceMin; }
+
+    private:
+        std::unique_ptr<TextureSampler> inputSampler;
+        std::unique_ptr<Texture> computeInputImage, computeOutputImage;  
+
+        float spanMax = 8.0, reduceMul = 1.0/8.0, reduceMin = 1.0/128.0;
+
+    protected:
+        std::vector<char> getShaderCode() override;
+        DescriptorSetLayout createDescriptorSetLayout() override;
+    };
+
+
+
     class BloomFilter: public FilterPipeline {
     private:
         static constexpr const char* BLOOM_DOWNSAMPLE_SHADER_SRC = "vulkan-engine/shaders/filters/bin/bloom_downsample.comp.spv";

@@ -198,6 +198,196 @@ namespace fly {
         );
     }
 
+    
+    
+    //GRAYSCALE FILTER IMPLEMENTATION
+    std::vector<char> FxaaFilter::getShaderCode() {
+        return readFile(FXAA_SHADER_SRC);
+    }
+
+    DescriptorSetLayout FxaaFilter::createDescriptorSetLayout() {
+        return newDescriptorSetBuild(MAX_FRAMES_IN_FLIGHT, {
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT}
+        }).build(vk);
+    }
+
+    void FxaaFilter::createResources() {
+        this->computeInputImage = std::make_unique<Texture>(
+            this->vk, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
+            VK_FORMAT_R16G16B16A16_SFLOAT, 
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT
+        );
+
+        this->computeOutputImage = std::make_unique<Texture>(
+            this->vk, 
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
+            VK_FORMAT_R16G16B16A16_SFLOAT, 
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT
+        );
+
+        this->inputSampler = std::make_unique<TextureSampler>(this->vk, this->computeInputImage->getMipLevels());
+
+        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
+            VkDescriptorImageInfo inputSamplerInfo{};
+            inputSamplerInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            inputSamplerInfo.imageView = this->computeInputImage->getImageView();
+            inputSamplerInfo.sampler = this->inputSampler->getSampler();
+
+            VkDescriptorImageInfo outputImageInfo{};
+            outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            outputImageInfo.imageView = this->computeOutputImage->getImageView();
+
+            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = this->descriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].dstArrayElement = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pImageInfo = &inputSamplerInfo;
+
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = this->descriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].dstArrayElement = 0;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pImageInfo = &outputImageInfo;
+
+            vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        }
+    }
+
+    void FxaaFilter::applyFilter(VkCommandBuffer commandBuffer, VkImage image, uint32_t currentFrame) {
+        //swapchain image from transfer dst to transfer src
+        transitionImageLayout(
+            commandBuffer, image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_ACCESS_TRANSFER_READ_BIT,
+            1, false
+        );
+
+        //compute input image from undef to transfer dst
+        transitionImageLayout(
+            commandBuffer, computeInputImage->getImage(),
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            1, false
+        );
+
+        // Copy from swapchain to compute input
+        VkImageCopy copyRegion{};
+        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copyRegion.extent = {vk->swapChainExtent.width, vk->swapChainExtent.height, 1};
+
+        vkCmdCopyImage(
+            commandBuffer,
+            image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            computeInputImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &copyRegion
+        );
+
+        //compute input image from transfer dst to general
+        transitionImageLayout(
+            commandBuffer, computeInputImage->getImage(),
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_ACCESS_SHADER_READ_BIT,
+            1, false
+        );
+
+        //compute output image from undef to general
+        transitionImageLayout(
+            commandBuffer, computeOutputImage->getImage(),
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            VK_ACCESS_SHADER_WRITE_BIT,
+            1, false
+        );
+
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, this->pipeline);
+        vkCmdBindDescriptorSets(
+            commandBuffer, 
+            VK_PIPELINE_BIND_POINT_COMPUTE, 
+            this->pipelineLayout, 
+            0, 
+            1, 
+            &this->descriptorSets[currentFrame], 
+            0, 
+            nullptr
+        );
+
+        FxaaPush constants {
+            glm::vec2(vk->swapChainExtent.width, vk->swapChainExtent.height),
+            this->spanMax,
+            this->reduceMul,
+            this->reduceMin
+        };
+        vkCmdPushConstants(
+            commandBuffer, 
+            this->pipelineLayout, 
+            VK_SHADER_STAGE_COMPUTE_BIT, 
+            0, sizeof(FxaaPush), 
+            &constants
+        );
+
+        uint32_t groupCountX = (vk->swapChainExtent.width + 15) / 16;
+        uint32_t groupCountY = (vk->swapChainExtent.height + 15) / 16;
+        vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
+
+        //compute output image from general to transfer src
+        transitionImageLayout(
+            commandBuffer, computeOutputImage->getImage(),
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_ACCESS_SHADER_WRITE_BIT,
+            VK_ACCESS_TRANSFER_READ_BIT,
+            1, false
+        );
+
+        //swapchain image from transfer src to transfer dst
+        transitionImageLayout(
+            commandBuffer, image,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_ACCESS_TRANSFER_READ_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            1, false
+        );
+
+        vkCmdCopyImage(
+            commandBuffer,
+            computeOutputImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &copyRegion
+        );
+    }
+
 
 
     //TONEMAP FILTER IMPLEMENTATION

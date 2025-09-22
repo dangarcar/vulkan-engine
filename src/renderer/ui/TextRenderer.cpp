@@ -35,20 +35,29 @@ namespace fly {
     
 
     void TextRenderer::render(uint32_t currentFrame) {
-        for(auto& [k, e]: this->oldFontInstances) {
+        ScopeTimer t("Text rendering");
+        for(const auto& k: this->oldFonts) {
             if(!this->fontRenderQueue.contains(k))
-                this->pipeline->setInstanceCount(this->fonts[k].meshIndex, 0);
+                this->pipeline->setInstanceCount(this->fonts.at(k).meshIndex, 0);
         }
-        this->oldFontInstances.clear();
+        this->oldFonts.clear();
 
-        for(auto& [k, v]: this->fontRenderQueue) {
+
+        //Traverse request queue
+        while(!this->requestQueue.empty()) {
+            convertText(std::move(this->requestQueue.front()));
+            this->requestQueue.pop();
+        }
+
+        //Traverse render queue
+        for(const auto& [k, v]: this->fontRenderQueue) {
             if(v.size() > MAX_CHARS)
                 throw std::runtime_error("There cannot be that number of characters of the same font!");
             
-            this->oldFontInstances.insert({k, v.size()});
+            this->oldFonts.insert(k);
 
-            memcpy(this->fonts[k].buffersInfo[currentFrame].pMappedData, &v[0], v.size()*sizeof(GPUCharacter));
-            this->pipeline->setInstanceCount(this->fonts[k].meshIndex, v.size());
+            memcpy(this->fonts.at(k).buffersInfo[currentFrame].pMappedData, &v[0], v.size()*sizeof(GPUCharacter));
+            this->pipeline->setInstanceCount(this->fonts.at(k).meshIndex, v.size());
         }
 
         this->fontRenderQueue.clear();
@@ -67,21 +76,24 @@ namespace fly {
             return;
         }
 
-        auto& font = this->fonts.at(fontName);                
+        this->requestQueue.push(RenderRequest{fontName, str, origin, align, size, color});        
+    }
+
+    void TextRenderer::convertText(RenderRequest r) {
+        auto& font = this->fonts.at(r.fontName);                
         std::vector<float> advances = {0};
-        for(auto c: str) {
-            FLY_ASSERT(font.fontChars.contains(c), "{} doesn't contain character '{}' in its files", fontName, c);
+        for(auto c: r.str) {
+            FLY_ASSERT(font.fontChars.contains(c), "{} doesn't contain character '{}' in its files", r.fontName, c);
 
             if(c == '\n')
                 advances.push_back(0);
             else
-                advances.back() += font.fontChars[c].advance * size;
+                advances.back() += font.fontChars[c].advance * r.size;
         }
 
         float advance = 0;
         int line = 0;
-        this->fontRenderQueue[fontName].reserve(this->fontRenderQueue[fontName].size() + str.size());
-        for(auto c: str) {
+        for(auto c: r.str) {
             if(c == '\n') {
                 line++;
                 advance = 0;
@@ -91,31 +103,31 @@ namespace fly {
             auto& fontChar = font.fontChars[c];
         
             glm::vec2 localOrigin;
-            switch(align) {
+            switch(r.align) {
                 case Align::LEFT:
-                    localOrigin = origin;
+                    localOrigin = r.origin;
                 break;
                 case Align::CENTER:
-                    localOrigin = origin - glm::vec2(advances[line]/2, 0);
+                    localOrigin = r.origin - glm::vec2(advances[line]/2, 0);
                 break;
                 case Align::RIGHT:
-                    localOrigin = origin - glm::vec2(advances[line], 0);
+                    localOrigin = r.origin - glm::vec2(advances[line], 0);
                 break;
             }
 
-            glm::vec2 sizeVector {fontChar.width * size, fontChar.height * size};
+            glm::vec2 sizeVector {fontChar.width * r.size, fontChar.height * r.size};
             glm::vec2 dorigin {advance - fontChar.originX, 1 - fontChar.originY + line};
             auto transform = glm::mat4(1.0f);
-            transform = glm::translate(transform, glm::vec3(localOrigin + dorigin*size, 0));
+            transform = glm::translate(transform, glm::vec3(localOrigin + dorigin*r.size, 0));
             transform = glm::scale(transform, glm::vec3(sizeVector, 1));
             advance += fontChar.advance;
 
             GPUCharacter gpuChar;
             gpuChar.proj = this->orthoProj * transform;
-            gpuChar.color = color;
+            gpuChar.color = r.color;
             gpuChar.texCoords = glm::vec4(fontChar.normalizedBegin, fontChar.normalizedEnd);
 
-            this->fontRenderQueue[fontName].push_back(gpuChar);   
+            this->fontRenderQueue[r.fontName].push_back(gpuChar);
         }
     }
 

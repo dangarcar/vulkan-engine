@@ -5,6 +5,8 @@
 #include "renderer/vulkan/VulkanTypes.h"
 #include <memory>
 
+#include <set>
+
 static const char* const FRAG_TEXT_SHADER_SRC = "vulkan-engine/shaders/bin/text.frag.spv";
 static const char* const VERT_TEXT_SHADER_SRC = "vulkan-engine/shaders/bin/text.vert.spv";
 
@@ -43,6 +45,15 @@ namespace fly {
         alignas(16) glm::vec4 texCoords;
     };
 
+    struct RenderRequest{
+        std::string fontName;
+        std::string str;
+        glm::vec2 origin;
+        Align align;
+        float size;
+        glm::vec4 color;
+    };
+
     class TextPipeline;
 
     class TextRenderer {
@@ -78,10 +89,13 @@ namespace fly {
     private:
         friend class Engine;
 
-    private:
+    private:        
+        void convertText(RenderRequest r);
+
+        std::queue<RenderRequest> requestQueue;
         std::unordered_map<std::string, Font> fonts;
         std::unordered_map<std::string, std::vector<GPUCharacter>> fontRenderQueue;
-        std::unordered_map<std::string, int> oldFontInstances; 
+        std::set<std::string> oldFonts; 
 
         std::unique_ptr<TextPipeline> pipeline;
         glm::mat4 orthoProj;
@@ -96,6 +110,7 @@ namespace fly {
         };
 
         const std::vector<uint32_t> indices { 0, 2, 1, 2, 0, 3 };
+    
     };
 
 

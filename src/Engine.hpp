@@ -58,15 +58,15 @@ namespace fly {
         void run();
         
         template<typename T, typename ...Args>
+        requires(std::is_base_of<Scene, T>::value)
         void setScene(Args&&... args) {
-            static_assert(std::is_base_of<Scene, T>::value);
             this->nextScene = std::make_unique<T>(std::forward(args)...);
             startNextSceneLoading();
         }
 
         template<typename T>
+        requires(std::is_base_of<IGraphicsPipeline, T>::value)
         T* addPipeline(bool background = false) {
-            static_assert(std::is_base_of<IGraphicsPipeline, T>::value);
             auto pip = std::make_unique<T>(this->vk);
             auto ptr = pip.get();
             pip->allocate(this->renderPass);
@@ -78,8 +78,8 @@ namespace fly {
         }
     
         template<typename T>
+        requires(std::is_base_of<FilterPipeline, T>::value)
         uint64_t addFilter() {
-            static_assert(std::is_base_of<FilterPipeline, T>::value);
             auto filter = std::make_unique<T>(vk);
             filter->allocate();
             filter->createResources();
@@ -88,8 +88,8 @@ namespace fly {
         }
 
         template<typename T>
+        requires(std::is_base_of<FilterPipeline, T>::value)
         T& getFilter(uint64_t filterId) {
-            static_assert(std::is_base_of<FilterPipeline, T>::value);
             auto ptr = dynamic_cast<T*>(this->filters[filterId].get());
             if(ptr == nullptr) 
                 throw std::runtime_error(std::format("There is no filter with id {}", filterId));

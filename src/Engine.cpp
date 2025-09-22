@@ -98,6 +98,10 @@ namespace fly {
                 info.pipeline.reset();
                 this->filterDetachPending.pop();
             }
+            while(!nextFilters.empty()) {
+                this->filters.insert(std::move(*nextFilters.begin()));
+                nextFilters.erase(nextFilters.begin());
+            }
             
             for(auto& pipeline: this->graphicPipelines)
                 pipeline->update(this->currentFrame);

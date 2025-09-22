@@ -1,0 +1,62 @@
+#version 450
+
+layout(binding = 0) uniform sampler2D inputSampler;
+layout(binding = 1, rgba16f) uniform writeonly image2D outputImage;
+
+layout(push_constant) uniform FxaaPush {
+    vec2 screenSize; 
+    float spanMax, reduceMul, reduceMin;
+} pc;
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+void main() {
+    ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+    vec2 uv = (vec2(texelCoord) + 0.5) / pc.screenSize;
+
+    vec3 rgbNW = texture(inputSampler, uv + vec2(-1.0,-1.0)/pc.screenSize).rgb;
+    vec3 rgbNE = texture(inputSampler, uv + vec2( 1.0,-1.0)/pc.screenSize).rgb;
+    vec3 rgbSW = texture(inputSampler, uv + vec2(-1.0, 1.0)/pc.screenSize).rgb;
+    vec3 rgbSE = texture(inputSampler, uv + vec2( 1.0, 1.0)/pc.screenSize).rgb;
+    vec3 rgbM =  texture(inputSampler, uv).rgb;
+
+    vec3 luma = vec3(0.299, 0.587, 0.114);
+    float lumaNW = dot(rgbNW, luma);
+    float lumaNE = dot(rgbNE, luma);
+    float lumaSW = dot(rgbSW, luma);
+    float lumaSE = dot(rgbSE, luma);
+    float lumaM  = dot(rgbM,  luma);
+
+    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+
+    vec2 dir;
+    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+    dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+
+    float dirReduce = max(
+        (lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * pc.reduceMul),
+        pc.reduceMin);
+
+    float rcpDirMin = 1.0/(min(abs(dir.x), abs(dir.y)) + dirReduce);
+
+    dir = min(vec2( pc.spanMax,  pc.spanMax),
+          max(vec2(-pc.spanMax, -pc.spanMax),
+          dir * rcpDirMin)) / pc.screenSize;
+
+    vec3 rgbA = (1.0/2.0) * (
+        texture(inputSampler, uv + dir * (1.0/3.0 - 0.5)).rgb +
+        texture(inputSampler, uv + dir * (2.0/3.0 - 0.5)).rgb);
+    vec3 rgbB = rgbA * (1.0/2.0) + (1.0/4.0) * (
+        texture(inputSampler, uv + dir * (0.0/3.0 - 0.5)).rgb +
+        texture(inputSampler, uv + dir * (3.0/3.0 - 0.5)).rgb);
+    float lumaB = dot(rgbB, luma);
+
+    vec4 outColor = vec4(1);
+    if((lumaB < lumaMin) || (lumaB > lumaMax))
+        outColor.rgb = rgbA;
+    else
+        outColor.rgb = rgbB;
+
+    imageStore(outputImage, texelCoord, outColor);
+}
