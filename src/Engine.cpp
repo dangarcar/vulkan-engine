@@ -57,8 +57,7 @@ namespace fly {
         this->tonemapper->allocate();
         this->tonemapper->createResources(this->hdrColorTexture);
 
-        this->deferredShader = std::make_unique<DeferredShader>(vk);
-        this->deferredShader->updateShader(hdrColorTexture, albedoSpecTexture, positionsTexture, normalsTexture);
+        setDeferredShader<DefaultDeferredShader>(this->vk);
     }
 
     void Engine::run() {
@@ -243,7 +242,7 @@ namespace fly {
         createAttachmentsAndBuffers();
         uiRenderer->recreateOnNewSwapChain();
         
-        deferredShader->updateShader(hdrColorTexture, albedoSpecTexture, positionsTexture, normalsTexture);
+        deferredShader->updateShader(hdrColorTexture, albedoSpecTexture, positionsTexture, normalsTexture, pickingTexture);
         
         tonemapper->createResources(hdrColorTexture);
         for(auto& [id, f]: filters)
@@ -320,21 +319,6 @@ namespace fly {
         vkCmdEndRenderPass(commandBuffer);
 
 
-        //RETRIEVE PICKING BUFFER DATA
-        glm::ivec2 mousePos = this->window.getMousePos();
-        if(0 <= mousePos.x && mousePos.x < window.getWidth()
-        && 0 <= mousePos.y && mousePos.y < window.getHeight()) {
-            fly::copyImageToBuffer(
-                commandBuffer, 
-                this->pickingTexture->getImage(), 
-                {mousePos.x, mousePos.y, 0}, 
-                {1, 1, 1}, 
-                false, 
-                this->pickingCPUBuffer
-            );
-        }
-
-
         //DO THE DEFERRED SHADING
         deferredShader->run(commandBuffer, this->currentFrame);
 
@@ -348,6 +332,33 @@ namespace fly {
         tonemapper->applyFilter(commandBuffer, vk->swapChainImages[imageIndex], this->currentFrame);
 
 
+        //RETRIEVE PICKING BUFFER DATA
+        glm::ivec2 mousePos = this->window.getMousePos();
+        if(0 <= mousePos.x && mousePos.x < window.getWidth()
+        && 0 <= mousePos.y && mousePos.y < window.getHeight()) {
+            transitionImageLayout(
+                commandBuffer, 
+                this->pickingTexture->getImage(), 
+                VK_IMAGE_LAYOUT_GENERAL, 
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 
+                VK_PIPELINE_STAGE_TRANSFER_BIT, 
+                VK_ACCESS_SHADER_READ_BIT, 
+                VK_ACCESS_TRANSFER_READ_BIT, 
+                this->pickingTexture->getMipLevels(), 
+                false
+            );
+            copyImageToBuffer(
+                commandBuffer, 
+                this->pickingTexture->getImage(), 
+                {mousePos.x, mousePos.y, 0}, 
+                {1, 1, 1}, 
+                false, 
+                this->pickingCPUBuffer
+            );
+        }
+
+        
         if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
             throw std::runtime_error("failed to record command buffer!");
     }
@@ -676,11 +687,11 @@ namespace fly {
         pickingAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         pickingAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         pickingAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        pickingAttachment.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        pickingAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 
         VkAttachmentReference pickingAttachmentRef{};
         pickingAttachmentRef.attachment = 4;
-        pickingAttachmentRef.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        pickingAttachmentRef.layout = VK_IMAGE_LAYOUT_GENERAL;
 
 
         std::array<VkAttachmentReference, 4> colorAttachs = {albedoAttachmentRef, positionsAttachmentRef, normalsAttachmentRef, pickingAttachmentRef};
@@ -757,7 +768,7 @@ namespace fly {
             vk->swapChainExtent.width, vk->swapChainExtent.height, 
             this->pickingFormat, 
             VK_SAMPLE_COUNT_1_BIT,
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT
         );
 

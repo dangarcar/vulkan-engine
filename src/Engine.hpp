@@ -60,7 +60,7 @@ namespace fly {
         template<typename T, typename ...Args>
         requires(std::is_base_of<Scene, T>::value)
         void setScene(Args&&... args) {
-            this->nextScene = std::make_unique<T>(std::forward(args)...);
+            this->nextScene = std::make_unique<T>(std::forward<Args>(args)...);
             startNextSceneLoading();
         }
 
@@ -96,8 +96,24 @@ namespace fly {
             return *ptr;
         }
 
+
+        template<typename T, typename ...Args>
+        requires(std::is_base_of<DeferredShader, T>::value)
+        void setDeferredShader(Args&&... args) {
+            this->deferredShader = std::make_unique<T>(std::forward<Args>(args)...);
+            this->deferredShader->updateShader(hdrColorTexture, albedoSpecTexture, positionsTexture, normalsTexture, pickingTexture);
+        }
+        
+        template<typename T>
+        requires(std::is_base_of<DeferredShader, T>::value)
+        T& getDeferredShader() {
+            auto ptr = dynamic_cast<T*>(this->deferredShader.get());
+            if(ptr == nullptr) 
+                throw std::runtime_error(std::format("There is no deferred shader with the type given"));
+            return *ptr;
+        }
+
         Tonemapper& getTonemapper() { return *this->tonemapper; }
-        DeferredShader& getDeferredShader() { return *this->deferredShader; }
         void removeFilter(uint64_t filterId);
         void removeFilters();
 

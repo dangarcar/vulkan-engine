@@ -35,7 +35,6 @@ namespace fly {
     
 
     void TextRenderer::render(uint32_t currentFrame) {
-        ScopeTimer t("Text rendering");
         for(const auto& k: this->oldFonts) {
             if(!this->fontRenderQueue.contains(k))
                 this->pipeline->setInstanceCount(this->fonts.at(k).meshIndex, 0);

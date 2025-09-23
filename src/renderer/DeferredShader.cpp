@@ -8,6 +8,7 @@
 namespace fly {
 
 
+    //DEFERRED SHADER COMMON METHODS
     DeferredShader::~DeferredShader() {
         vkDestroyDescriptorPool(vk->device, this->descriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(vk->device, this->descriptorSetLayout.layout, nullptr);
@@ -15,8 +16,53 @@ namespace fly {
         vkDestroyPipelineLayout(vk->device, this->pipelineLayout, nullptr);
     }
 
+    void DeferredShader::run(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
+        //Output image from undef to general
+        transitionImageLayout(
+            commandBuffer, outputTexture->getImage(),
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            VK_ACCESS_SHADER_WRITE_BIT,
+            1, false
+        );
 
-    DeferredShader::DeferredShader(std::shared_ptr<VulkanInstance> vk): vk(vk) {
+        //Dispatch shader
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, this->pipeline);
+        vkCmdBindDescriptorSets(
+            commandBuffer, 
+            VK_PIPELINE_BIND_POINT_COMPUTE, 
+            this->pipelineLayout, 
+            0, 
+            1, 
+            &this->descriptorSets[currentFrame], 
+            0, 
+            nullptr
+        );
+        uint32_t groupCountX = (vk->swapChainExtent.width + 15) / 16;
+        uint32_t groupCountY = (vk->swapChainExtent.height + 15) / 16;
+        vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
+
+
+        //Output image from general to transfer dst (the format that the filters expect)
+        transitionImageLayout(
+            commandBuffer, outputTexture->getImage(),
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_ACCESS_SHADER_WRITE_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            1, false
+        );
+    }
+
+
+
+    //DEFAULT DEFERRED SHADER IMPLEMENTATION
+    DefaultDeferredShader::DefaultDeferredShader(std::shared_ptr<VulkanInstance> vk): DeferredShader(vk) {
         this->uniformBuffer = std::make_unique<fly::TBuffer<DeferredUBO>>(vk, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
         
         //DESCRIPTOR LAYOUT CREATION
@@ -37,11 +83,12 @@ namespace fly {
     }
 
 
-    void DeferredShader::updateShader(
+    void DefaultDeferredShader::updateShader(
         std::shared_ptr<Texture> hdrColorTexture,
         std::shared_ptr<Texture> albedoSpecTexture, 
         std::shared_ptr<Texture> positionsTexture, 
-        std::shared_ptr<Texture> normalsTexture
+        std::shared_ptr<Texture> normalsTexture,
+        [[maybe_unused]] std::shared_ptr<Texture> pickingTexture
     ) {
         this->outputTexture = hdrColorTexture;
 
@@ -112,49 +159,4 @@ namespace fly {
             vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
-
-    
-    void DeferredShader::run(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
-        //Output image from undef to general
-        transitionImageLayout(
-            commandBuffer, outputTexture->getImage(),
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            VK_ACCESS_SHADER_WRITE_BIT,
-            1, false
-        );
-
-        //Dispatch shader
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, this->pipeline);
-        vkCmdBindDescriptorSets(
-            commandBuffer, 
-            VK_PIPELINE_BIND_POINT_COMPUTE, 
-            this->pipelineLayout, 
-            0, 
-            1, 
-            &this->descriptorSets[currentFrame], 
-            0, 
-            nullptr
-        );
-        uint32_t groupCountX = (vk->swapChainExtent.width + 15) / 16;
-        uint32_t groupCountY = (vk->swapChainExtent.height + 15) / 16;
-        vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
-
-
-        //Output image from general to transfer dst (the format that the filters expect)
-        transitionImageLayout(
-            commandBuffer, outputTexture->getImage(),
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_ACCESS_SHADER_WRITE_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            1, false
-        );
-    }
-
 }
