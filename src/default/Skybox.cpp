@@ -1,7 +1,7 @@
 #include "Skybox.hpp"
 
 #include <Engine.hpp>
-#include "vulkan/Descriptors.hpp"
+#include "../renderer/vulkan/Descriptors.hpp"
 
 namespace fly {
 

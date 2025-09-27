@@ -10,13 +10,13 @@ message("Building in ${CMAKE_BUILD_TYPE} mode")
 
 find_package(Vulkan REQUIRED)
 
-FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG 3.3-stable)
 FetchContent_MakeAvailable(glfw)
 
-FetchContent_Declare(glm GIT_REPOSITORY https://github.com/g-truc/glm.git GIT_TAG master)
+FetchContent_Declare(glm GIT_REPOSITORY https://github.com/g-truc/glm.git GIT_TAG release-1-0-2)
 FetchContent_MakeAvailable(glm)
 
-FetchContent_Declare(imgui_external GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG master)
+FetchContent_Declare(imgui_external GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG v1.92.3)
 FetchContent_MakeAvailable(imgui_external)
 
 #Thanks to u/Kakod123 on https://www.reddit.com/r/vulkan/comments/1h6ta10/include_ktx_lib_to_project/ for this snippet

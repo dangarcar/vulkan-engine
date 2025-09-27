@@ -1,4 +1,4 @@
-#include "Camera.hpp"
+#include "BasicCamera.hpp"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -12,13 +12,18 @@
 
 namespace fly {
 
-    BasicCamera::BasicCamera(glm::vec3 pos, float fov, glm::vec3 lookDir): 
-        pos{pos}, lookDir{lookDir}, fov{fov}
+    BasicCamera::BasicCamera(Window& window, glm::vec3 pos, float fov, glm::vec3 lookDir): 
+        pos{pos}, lookDir{lookDir}, fov{fov}, window(window)
     {
-        
     } 
 
-    void BasicCamera::update(Window& window, float dt) {
+
+    BasicCamera::~BasicCamera() {
+        glfwSetInputMode(window.getGlfwWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
+
+
+    void BasicCamera::update(float dt) {
         ImGui::SliderFloat("FOV", &this->fov, 10, 170);
         
         ImGui::LabelText("Pos", "%f %f %f", pos.x, pos.y, pos.z);
@@ -28,8 +33,8 @@ namespace fly {
         ImGui::SliderFloat("Mouse speed", &this->mouseSpeed, 0, 1000);
         ImGui::SliderFloat("Scroll speed", &this->scrollSpeed, 0, 1000);
 
-        if(window.keyJustPressed(GLFW_KEY_ESCAPE)) used = false; //FIXME:
-        if(window.mouseClicked(MouseButton::LEFT)) used = true; //FIXME:
+        if(window.keyJustPressed(GLFW_KEY_ESCAPE)) used = false;
+        if(window.mouseClicked(MouseButton::LEFT)) used = true;
 
         if(used)
             glfwSetInputMode(window.getGlfwWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);

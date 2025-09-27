@@ -3,6 +3,7 @@
 #include "renderer/vulkan/VulkanConstants.h"
 #include "renderer/vulkan/VulkanHelpers.hpp"
 
+
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 
@@ -56,8 +57,6 @@ namespace fly {
         this->tonemapper = std::make_unique<Tonemapper>(vk);
         this->tonemapper->allocate();
         this->tonemapper->createResources(this->hdrColorTexture);
-
-        setDeferredShader<DefaultDeferredShader>(this->vk);
     }
 
     void Engine::run() {
@@ -96,10 +95,6 @@ namespace fly {
                     break;
                 info.pipeline.reset();
                 this->filterDetachPending.pop();
-            }
-            while(!nextFilters.empty()) {
-                this->filters.insert(std::move(*nextFilters.begin()));
-                nextFilters.erase(nextFilters.begin());
             }
             
             for(auto& pipeline: this->graphicPipelines)
@@ -400,26 +395,35 @@ namespace fly {
         
         this->graphicPipelines = std::move(nextGraphicsPipelines);
         nextGraphicsPipelines.clear();
+        
+        this->filters = std::move(this->nextFilters);
+        this->nextFilters.clear();
 
-        this->filters = std::move(nextFilters);
-        nextFilters.clear();
+        this->deferredShader = this->nextScene->getDeferredShader(vk); //FIXME: THIS DOES NOT WORK !!!!! AAAAAA
+        deferredShader->updateShader(hdrColorTexture, albedoSpecTexture, positionsTexture, normalsTexture, pickingTexture);
 
         this->scene = std::move(this->nextScene);
         this->nextScene = nullptr;
     }
 
     void Engine::startNextSceneLoading() {
-        this->nextSceneReady = std::async(std::launch::async, [this] {
-            FLY_ASSERT(this->nextScene != nullptr, "Next scene is null");
+        auto& nextScene = this->nextScene; //FIXME: idk is this is UB
+        auto vk = this->vk;
+        this->nextSceneReady = std::async(std::launch::async, [vk, &nextScene] {
+            FLY_ASSERT(nextScene != nullptr, "Next scene is null");
             
-            try {      
-                this->nextScene->init(this->transferCommandPool);
+            auto status = VK_SUCCESS;
+            auto newSceneCommandPool = createCommandPool(vk, 0);
+
+            try {
+                nextScene->init(newSceneCommandPool);
             } catch(const std::exception& e) {
                 std::cerr << "ERROR: " << e.what() << std::endl;
-                return VK_ERROR_INITIALIZATION_FAILED;
+                status = VK_ERROR_INITIALIZATION_FAILED;
             }
             
-            return VK_SUCCESS;
+            vkDestroyCommandPool(vk->device, newSceneCommandPool, nullptr); 
+            return status;
         });
     }
 

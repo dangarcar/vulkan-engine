@@ -8,13 +8,13 @@
 
 #include <unordered_map>
 
-#include "vulkan/Descriptors.hpp"
+#include "../renderer/vulkan/Descriptors.hpp"
 
 namespace std {
     template<> struct hash<fly::Vertex> {
         size_t operator()(fly::Vertex const& vertex) const {
             return ((hash<glm::vec3>()(vertex.pos) ^
-                    (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+                    (hash<glm::vec3>()(vertex.normal) << 1)) >> 1) ^
                     (hash<glm::vec2>()(vertex.texCoord) << 1);
         }
     };
@@ -94,7 +94,7 @@ namespace fly {
         attributeDescriptions[1].binding = 0;
         attributeDescriptions[1].location = 1;
         attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
+        attributeDescriptions[1].offset = offsetof(Vertex, normal);
 
         attributeDescriptions[2].binding = 0;
         attributeDescriptions[2].location = 2;
@@ -105,7 +105,7 @@ namespace fly {
     }
 
     bool Vertex::operator==(const Vertex& other) const {
-        return pos == other.pos && color == other.color && texCoord == other.texCoord;
+        return pos == other.pos && normal == other.normal && texCoord == other.texCoord;
     }
 
 
@@ -122,10 +122,11 @@ namespace fly {
             throw std::runtime_error(warn + err);
         }
 
+        
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
-        for (const auto& shape : shapes) {
-            for (const auto& index : shape.mesh.indices) {
+        for(const auto& shape : shapes) {
+            for(const auto& index : shape.mesh.indices) {
                 Vertex vertex{};
                 
                 vertex.pos = {
@@ -134,15 +135,20 @@ namespace fly {
                     attrib.vertices[3 * index.vertex_index + 2]
                 };
                 
+                
+                vertex.normal = {
+                    attrib.normals[3 * index.normal_index + 0],
+                    attrib.normals[3 * index.normal_index + 1],
+                    attrib.normals[3 * index.normal_index + 2]
+                };
+
                 vertex.texCoord = {
                     attrib.texcoords[2 * index.texcoord_index + 0],
                     1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-                };
-                
-                vertex.color = {1.0f, 1.0f, 1.0f};
+                };                
                 
 
-                if (uniqueVertices.count(vertex) == 0) {
+                if(uniqueVertices.count(vertex) == 0) {
                     uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
                     vertices.push_back(vertex);
                 }

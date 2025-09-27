@@ -4,10 +4,10 @@
 #include <glm/glm.hpp>
 #include <memory>
 
-#include "TGraphicsPipeline.hpp"
-#include "TVertexArray.hpp"
-#include "TBuffer.hpp"
-#include "Texture.hpp"
+#include "../renderer/TGraphicsPipeline.hpp"
+#include "../renderer/TVertexArray.hpp"
+#include "../renderer/TBuffer.hpp"
+#include "../renderer/Texture.hpp"
 
 
 static const char* const SKYBOX_FRAG_SHADER_SRC = "vulkan-engine/shaders/bin/skybox.frag.spv";

@@ -1,10 +1,9 @@
 #pragma once
 
-#include "TGraphicsPipeline.hpp"
-#include "TBuffer.hpp"
-#include "TVertexArray.hpp"
-
-#include "Texture.hpp"
+#include "../renderer/TGraphicsPipeline.hpp"
+#include "../renderer/TBuffer.hpp"
+#include "../renderer/TVertexArray.hpp"
+#include "../renderer/Texture.hpp"
 
 #include "../Utils.hpp"
 
@@ -23,7 +22,7 @@ namespace fly {
 
     struct Vertex {
         glm::vec3 pos;
-        glm::vec3 color;
+        glm::vec3 normal;
         glm::vec2 texCoord;
     
         static VkVertexInputBindingDescription getBindingDescription();

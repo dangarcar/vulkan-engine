@@ -16,6 +16,9 @@ namespace fly {
         virtual void init(VkCommandPool commandPool) = 0;
         virtual void run(double dt, uint32_t currentFrame, VkCommandPool commandPool) = 0;
         virtual ~Scene() {}
+
+        //Should be static, but there is no static virtual 
+        virtual std::unique_ptr<DeferredShader> getDeferredShader(std::shared_ptr<VulkanInstance> vk) = 0;
     };
 
     struct EngineCreateInfo {
@@ -97,13 +100,6 @@ namespace fly {
         }
 
 
-        template<typename T, typename ...Args>
-        requires(std::is_base_of<DeferredShader, T>::value)
-        void setDeferredShader(Args&&... args) {
-            this->deferredShader = std::make_unique<T>(std::forward<Args>(args)...);
-            this->deferredShader->updateShader(hdrColorTexture, albedoSpecTexture, positionsTexture, normalsTexture, pickingTexture);
-        }
-        
         template<typename T>
         requires(std::is_base_of<DeferredShader, T>::value)
         T& getDeferredShader() {
@@ -155,6 +151,7 @@ namespace fly {
 
         std::unique_ptr<DeferredShader> deferredShader;
         std::unique_ptr<Tonemapper> tonemapper;
+        
         struct FilterDetachInfo { 
             std::unique_ptr<FilterPipeline> pipeline; 
             uint32_t frame; 

@@ -11,9 +11,10 @@ namespace fly {
         static constexpr glm::vec3 UP = {0, 1, 0};
 
     public:
-        BasicCamera(glm::vec3 pos, float fov = 45, glm::vec3 lookDir = {0, 0, 1});
+        BasicCamera(Window& window, glm::vec3 pos, float fov = 45, glm::vec3 lookDir = {0, 0, 1});
+        ~BasicCamera();
 
-        void update(Window& window, float dt);
+        void update(float dt);
 
         glm::mat4 getProjection() const { return this->proj; }
         glm::mat4 getView() const { return this->view; } 
@@ -25,6 +26,8 @@ namespace fly {
         glm::vec3 pos, lookDir;
         float fov, speed = 1.0f, mouseSpeed = 500.0f, scrollSpeed = 600.0f;
         bool used = false;
+
+        Window& window;
 
     };
 
