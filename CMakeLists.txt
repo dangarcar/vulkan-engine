@@ -10,7 +10,7 @@ message("Building in ${CMAKE_BUILD_TYPE} mode")
 
 find_package(Vulkan REQUIRED)
 
-FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG 3.3-stable)
+FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG 3.4)
 FetchContent_MakeAvailable(glfw)
 
 FetchContent_Declare(glm GIT_REPOSITORY https://github.com/g-truc/glm.git GIT_TAG release-1-0-2)
@@ -32,7 +32,7 @@ set(KTX_FEATURE_STATIC_LIBRARY ON CACHE BOOL "Build KTX as a static library" FOR
 FetchContent_Declare(
         fetch_ktx
         GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software
-        GIT_TAG        v4.3.2
+        GIT_TAG        v4.4.0
 )
 FetchContent_MakeAvailable(fetch_ktx)
 
