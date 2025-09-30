@@ -108,4 +108,24 @@ namespace fly {
         return buffer;
     }
 
+
+    template<typename T>
+    struct UPair { T a, b; };
+    
+    template<typename T>
+    bool operator==(const UPair<T>& x, const UPair<T>& y) {
+        auto normal = x.a == y.a && x.b == y.b;
+        auto crossed = x.a == y.b && x.b == y.a;
+        return normal || crossed; 
+    }
+    
+}
+
+namespace std {
+    template<typename T> 
+    struct hash<fly::UPair<T>> {
+        size_t operator()(const fly::UPair<T>& pair) const {
+            return hash<T>()(pair.a) ^ hash<T>()(pair.b);
+        }
+    };
 }
