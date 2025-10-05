@@ -119,7 +119,7 @@ namespace fly {
 
     class SkyboxPipeline : public TGraphicsPipeline<SimpleVertex> {
     public:
-        SkyboxPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, false, true} {}
+        SkyboxPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, DEFERRED_ENABLED} {}
         ~SkyboxPipeline() = default;
 
         void updateDescriptorSet(

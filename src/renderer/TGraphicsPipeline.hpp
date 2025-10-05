@@ -25,6 +25,11 @@ namespace fly {
         virtual ~IGraphicsPipeline() {}
     };
 
+    constexpr uint32_t DEPTH_TEST_ENABLED = 0x01;
+    constexpr uint32_t DEFERRED_ENABLED = 0x02;
+    constexpr uint32_t BACK_CULLING_ENABLED = 0x04;
+
+
     /**
     
     This class creates and destructs the graphics pipeline object, the pipeline layout and the descriptor sets
@@ -36,7 +41,7 @@ namespace fly {
     template<typename Vertex_t>
     class TGraphicsPipeline : public IGraphicsPipeline {
     public:
-        TGraphicsPipeline(std::shared_ptr<VulkanInstance> vk, bool depthTest, bool deferredRendering): depthTestEnabled(depthTest), deferredRendering(deferredRendering), vk{vk} {}
+        TGraphicsPipeline(std::shared_ptr<VulkanInstance> vk, uint32_t flags): flags(flags), vk{vk} {}
         virtual ~TGraphicsPipeline() {
             std::vector<unsigned> keys;
             keys.reserve(this->meshes.size());
@@ -68,7 +73,7 @@ namespace fly {
             
             auto [pipeline, layout] = createGraphicsPipeline(
                 this->vk, this->getVertShaderCode(), this->getFragShaderCode(), 
-                renderPass, this->descriptorSetLayout.layout, this->depthTestEnabled, this->deferredRendering
+                renderPass, this->descriptorSetLayout.layout, this->flags
             );
             this->graphicsPipeline = pipeline;
             this->pipelineLayout = layout;
@@ -110,14 +115,17 @@ namespace fly {
     
             VkDeviceSize offsets[] = {0};
             for(const auto& [k, mesh]: this->meshes) {
-                VkBuffer vertexBuffers[] = {mesh.vertexArray->getVertexBuffer()};
-                vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+                if(mesh.vertexArray->getVertexCount() == 0 || mesh.vertexArray->getIndexCount() == 0)
+                    continue;
+
+                VkBuffer vBuffer = mesh.vertexArray->getVertexBuffer();
+                vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vBuffer, offsets);
     
                 vkCmdBindIndexBuffer(commandBuffer, mesh.vertexArray->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
     
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->pipelineLayout, 0, 1, &mesh.descriptorSets[currentFrame], 0, nullptr);
     
-                vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.vertexArray->getIndices().size()),
+                vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.vertexArray->getIndexCount()),
                     mesh.instanceCount, 0, 0, 0); 
             }
         }
@@ -126,11 +134,16 @@ namespace fly {
             FLY_ASSERT(meshes.contains(meshIndex), "Invalid mesh");
             FLY_ASSERT(instanceCount >= 0, "Instance count must be greater than 0");
 
-            meshes[meshIndex].instanceCount = instanceCount;
+            meshes.at(meshIndex).instanceCount = instanceCount;
+        }
+
+        TVertexArray<Vertex_t>& getVertexData(unsigned meshIndex) {
+            FLY_ASSERT(meshes.contains(meshIndex), "Invalid mesh");
+            return *meshes.at(meshIndex).vertexArray;
         }
 
     protected:
-        bool depthTestEnabled, deferredRendering;
+        uint32_t flags;
         struct MeshData {
             std::unique_ptr<TVertexArray<Vertex_t>> vertexArray;
             VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
@@ -163,8 +176,7 @@ namespace fly {
 
             VkRenderPass renderPass,
             VkDescriptorSetLayout descriptorSetLayout,
-            bool depthTestEnabled,
-            bool deferredRendering
+            uint32_t flags
         ) {
             VkShaderModule vertShaderModule = createShaderModule(vk->device, vertShaderCode);
             VkShaderModule fragShaderModule = createShaderModule(vk->device, fragShaderCode);
@@ -213,7 +225,10 @@ namespace fly {
             rasterizer.rasterizerDiscardEnable = VK_FALSE;
             rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
             rasterizer.lineWidth = 1.0f;
-            rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+            if(flags & BACK_CULLING_ENABLED)
+                rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+            else
+                rasterizer.cullMode = VK_CULL_MODE_NONE;
             rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
             rasterizer.depthBiasEnable = VK_FALSE;
             rasterizer.depthBiasConstantFactor = 0.0f; // Optional
@@ -233,7 +248,7 @@ namespace fly {
         
             VkPipelineDepthStencilStateCreateInfo depthStencil{};
             depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-            if(!depthTestEnabled)
+            if(!(flags & DEPTH_TEST_ENABLED))
                 depthStencil.depthTestEnable = VK_FALSE;
             else {
                 depthStencil.depthTestEnable = VK_TRUE;
@@ -249,7 +264,7 @@ namespace fly {
             
 
             std::vector<VkPipelineColorBlendAttachmentState> blendAttachs;
-            if(deferredRendering) {
+            if(flags & DEFERRED_ENABLED) {
                 VkPipelineColorBlendAttachmentState albedoBlendAttachment{};
                 albedoBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
                 albedoBlendAttachment.blendEnable = VK_FALSE;

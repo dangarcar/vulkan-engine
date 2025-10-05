@@ -112,14 +112,14 @@ namespace fly {
             {{0.0f, 1.0f}}
         };
 
-        const std::vector<uint32_t> indices { 0, 2, 1, 2, 0, 3 };
+        const std::vector<uint32_t> indices { 0, 1, 2, 0, 2, 3 };
     };
 
 
 
     class GPipeline2D: public TGraphicsPipeline<Vertex2D> {
     public:
-        GPipeline2D(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, false, false} {}
+        GPipeline2D(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, 0} {}
         ~GPipeline2D() = default;
     
         void updateDescriptorSet(

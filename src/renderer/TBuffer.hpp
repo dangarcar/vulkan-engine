@@ -50,6 +50,10 @@ namespace fly {
             std::memcpy(this->buffersInfo[currentFrame].pMappedData, &value, sizeof(T));
         }
 
+        void updateBuffer(const T& value, size_t bytes, uint32_t currentFrame) {
+            std::memcpy(this->buffersInfo[currentFrame].pMappedData, &value, bytes);
+        }
+
 
     private:
         std::array<VkBuffer, MAX_FRAMES_IN_FLIGHT> buffers;

@@ -109,7 +109,7 @@ namespace fly {
             {{0.0f, 1.0f}}
         };
 
-        const std::vector<uint32_t> indices { 0, 2, 1, 2, 0, 3 };
+        const std::vector<uint32_t> indices { 0, 1, 2, 0, 2, 3 };
     
     };
 
@@ -117,7 +117,7 @@ namespace fly {
 
     class TextPipeline: public TGraphicsPipeline<Vertex2D> {
     public:
-        TextPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, false, false} {}
+        TextPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, 0} {}
         ~TextPipeline() = default;
 
         void updateDescriptorSet(

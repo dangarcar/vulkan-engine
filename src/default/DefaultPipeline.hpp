@@ -34,7 +34,7 @@ namespace fly {
 
     class DefaultPipeline: public TGraphicsPipeline<Vertex> {
     public:
-        DefaultPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, true, true} {}
+        DefaultPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, DEPTH_TEST_ENABLED | DEFERRED_ENABLED | BACK_CULLING_ENABLED} {}
         ~DefaultPipeline() = default;
     
         void updateDescriptorSet(
