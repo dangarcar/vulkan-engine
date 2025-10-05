@@ -329,8 +329,8 @@ namespace fly {
 
         //RETRIEVE PICKING BUFFER DATA
         glm::ivec2 mousePos = this->window.getMousePos();
-        if(0 <= mousePos.x && mousePos.x < window.getWidth()
-        && 0 <= mousePos.y && mousePos.y < window.getHeight()) {
+        if(1 <= mousePos.x && mousePos.x < window.getWidth()-1
+        && 1 <= mousePos.y && mousePos.y < window.getHeight()-1) {
             transitionImageLayout(
                 commandBuffer, 
                 this->pickingTexture->getImage(), 
@@ -346,8 +346,8 @@ namespace fly {
             copyImageToBuffer(
                 commandBuffer, 
                 this->pickingTexture->getImage(), 
-                {mousePos.x, mousePos.y, 0}, 
-                {1, 1, 1}, 
+                {mousePos.x-1, mousePos.y-1, 0}, 
+                {3, 3, 1}, 
                 false, 
                 this->pickingCPUBuffer
             );
@@ -788,7 +788,7 @@ namespace fly {
         //CREATE PICKING BUFFER (CPU SIDE)
         VkBufferCreateInfo bufferCreateInfo{};
         bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferCreateInfo.size = sizeof(uint32_t);
+        bufferCreateInfo.size = 9*sizeof(uint32_t);
         bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
         VmaAllocationCreateInfo bufferCreateAllocInfo = {};

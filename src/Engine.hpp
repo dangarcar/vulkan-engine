@@ -117,7 +117,11 @@ namespace fly {
         const Window& getWindow() const { return this->window; }
         std::shared_ptr<VulkanInstance> getVulkanInstance() const { return this->vk; } 
         UIRenderer& getUIRenderer() { return *this->uiRenderer; }
-        uint32_t getPickingValue() const { return *static_cast<uint32_t*>(pickingCPUBufferInfo.pMappedData); }
+        std::array<uint32_t, 9> getPickingMatrix() const { 
+            std::array<uint32_t, 9> arr;
+            memcpy(arr.data(), pickingCPUBufferInfo.pMappedData, 9*sizeof(uint32_t));
+            return arr; 
+        }
 
     private:
         const char* name;
