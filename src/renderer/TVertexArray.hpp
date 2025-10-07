@@ -96,6 +96,7 @@ namespace fly {
         const std::vector<T>& data
     ) {
         buffer.count = data.size();
+        if(buffer.count == 0) return std::nullopt;
 
         if(buffer.count > buffer.capacity) { //New buffer creation                
             auto tmp = buffer;
