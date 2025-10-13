@@ -101,7 +101,9 @@ namespace fly {
     }
 
     void UIRenderer::cleanupSwapchain() {
-        for (auto framebuffer : this->uiFramebuffers) {
+        this->depthTexture.reset();
+
+        for(auto framebuffer : this->uiFramebuffers) {
             vkDestroyFramebuffer(vk->device, framebuffer, nullptr);
         }
     }
@@ -128,9 +130,11 @@ namespace fly {
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = vk->swapChainExtent;
         
-        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+        std::array<VkClearValue, 2> clearColors;
+        clearColors[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+        clearColors[1].depthStencil = {1.0f, 0};
+        renderPassInfo.clearValueCount = clearColors.size();
+        renderPassInfo.pClearValues = clearColors.data();
         
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -202,23 +206,40 @@ namespace fly {
         color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         
+        VkAttachmentDescription depthAttachment{};
+        depthAttachment.format = findDepthFormat(vk->physicalDevice);
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+
         VkSubpassDescription subpass = {};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &color_attachment;
+        subpass.pDepthStencilAttachment = & depthAttachmentRef;
 
         VkSubpassDependency dependency = {};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.srcAccessMask = 0;
-        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
+        std::array<VkAttachmentDescription, 2> attachments = {attachment, depthAttachment};
         VkRenderPassCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        info.attachmentCount = 1;
-        info.pAttachments = &attachment;
+        info.attachmentCount = attachments.size();
+        info.pAttachments = attachments.data();
         info.subpassCount = 1;
         info.pSubpasses = &subpass;
         info.dependencyCount = 1;
@@ -229,18 +250,29 @@ namespace fly {
     }
 
     void UIRenderer::createFramebuffers() {
-        this->uiFramebuffers.resize(vk->swapChainImageViews.size());
+        auto depthFormat = findDepthFormat(vk->physicalDevice);        
+        this->depthTexture = std::make_unique<Texture>(
+            this->vk,
+            vk->swapChainExtent.width, vk->swapChainExtent.height, 
+            depthFormat,
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            VK_IMAGE_ASPECT_DEPTH_BIT
+        );
 
+
+        this->uiFramebuffers.resize(vk->swapChainImageViews.size());
         for(size_t i=0; i<vk->swapChainImageViews.size(); i++) {
-            VkImageView attachments[] = {
-                vk->swapChainImageViews[i]
+            std::array<VkImageView, 2> attachments = {
+                vk->swapChainImageViews[i],
+                this->depthTexture->getImageView()
             };
         
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             framebufferInfo.renderPass = this->uiRenderPass;
-            framebufferInfo.attachmentCount = 1;
-            framebufferInfo.pAttachments = attachments;
+            framebufferInfo.attachmentCount = attachments.size();
+            framebufferInfo.pAttachments = attachments.data();
             framebufferInfo.width = vk->swapChainExtent.width;
             framebufferInfo.height = vk->swapChainExtent.height;
             framebufferInfo.layers = 1;

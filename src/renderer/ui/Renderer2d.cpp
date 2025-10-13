@@ -5,9 +5,14 @@
 
 namespace fly {
 
+    glm::mat4 orthoMatrixByWindowExtent(int width, int height) {
+        return glm::ortho(0.0f, (float)width, 0.0f, (float)height, -MAX_Z_INDEX, MAX_Z_INDEX);
+    }
+
+
     // RENDERER IMPLEMENTATION
     Renderer2d::Renderer2d(std::shared_ptr<VulkanInstance> vk): vk{vk} {
-        this->orthoProj = glm::ortho(0.0f, (float)vk->swapChainExtent.width, 0.0f, (float)vk->swapChainExtent.height);
+        this->orthoProj = orthoMatrixByWindowExtent(vk->swapChainExtent.width, vk->swapChainExtent.height);
     }
 
     void Renderer2d::init(std::unique_ptr<GPipeline2D> pipeline, VkCommandPool commandPool) {
@@ -25,8 +30,11 @@ namespace fly {
         glm::vec2 size, 
         bool centre,
         glm::vec4 modColor,
-        bool useTexture
+        bool useTexture,
+        int zIndex
     ) {
+        FLY_ASSERT(0 <= zIndex && zIndex < MAX_Z_INDEX, "Z index must be positive and less than the max z");
+
         if(centre)
             origin -= size / 2.0f;
 
@@ -38,6 +46,7 @@ namespace fly {
         ubo.proj = this->orthoProj * transform;
         ubo.modColor = modColor;
         ubo.useTexture = useTexture;
+        ubo.zIndex = zIndex - MAX_Z_INDEX + 1;
 
         this->textureRenderQueue[texture.toRef()].push_back(
             {texture, textureSampler, ubo}
@@ -45,7 +54,7 @@ namespace fly {
     }
 
     void Renderer2d::resize(int width, int height) {
-        this->orthoProj = glm::ortho(0.0f, (float)width, 0.0f, (float)height);
+        this->orthoProj = orthoMatrixByWindowExtent(width, height);
     }
 
     void Renderer2d::render(uint32_t currentFrame, VkCommandPool commandPool) {

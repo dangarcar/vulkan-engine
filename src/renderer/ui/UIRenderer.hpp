@@ -19,37 +19,40 @@ namespace fly {
             glm::vec2 origin, 
             glm::vec2 size, 
             bool centre = false,
-            glm::vec4 modColor = {1,1,1,1}
+            glm::vec4 modColor = {1,1,1,1},
+            int zIndex = 0
         ) {
-            renderer2d.renderTexture(texture, textureSampler, origin, size, centre, modColor);
+            this->renderer2d._renderTexture(texture, textureSampler, origin, size, centre, modColor, true, zIndex);
         }
 
         void renderQuad(
             glm::vec2 origin, 
             glm::vec2 size, 
             glm::vec4 color,
-            bool centre = false
+            bool centre = false,
+            int zIndex = 0
         ) {
-            this->renderer2d.renderQuad(origin, size, color, centre);            
+            this->renderer2d._renderTexture(*renderer2d.nullTexture, *renderer2d.nullTextureSampler, origin, size, centre, color, false, zIndex);         
         }
 
         void renderText(
-            const std::string& fontName, 
             const std::string& str, 
             glm::vec2 origin, 
             Align align, 
             float size, 
-            glm::vec4 color
+            glm::vec3 color,
+            int zIndex = 0
         ) {
-            this->textRenderer.renderText(fontName, str, origin, align, size, color);
+            this->textRenderer.renderText(str, origin, align, size, color, zIndex);
         }
 
         void loadFont(
             const std::string& fontName, 
             std::filesystem::path fontImg, 
-            std::filesystem::path fontJson
+            std::filesystem::path fontJson,
+            VkCommandPool transferCommandPool
         ) {
-            this->textRenderer.loadFont(fontName, fontImg, fontJson, this->uiCommandPool);
+            this->textRenderer.loadFont(fontName, fontImg, fontJson, transferCommandPool);
         }
 
         void cleanupSwapchain();
@@ -74,7 +77,8 @@ namespace fly {
         std::vector<VkSemaphore> uiRenderFinishedSemaphores;
         
         std::shared_ptr<VulkanInstance> vk;
-        
+        std::unique_ptr<Texture> depthTexture;
+
         Renderer2d renderer2d;
         TextRenderer textRenderer;
         

@@ -245,12 +245,12 @@ namespace fly {
     }
 
     void Engine::cleanupSwapChain() {
-        pickingTexture.reset();
-        hdrColorTexture.reset();
-        depthTexture.reset();
-        albedoSpecTexture.reset();
-        positionsTexture.reset();
-        normalsTexture.reset();
+        this->pickingTexture.reset();
+        this->hdrColorTexture.reset();
+        this->depthTexture.reset();
+        this->albedoSpecTexture.reset();
+        this->positionsTexture.reset();
+        this->normalsTexture.reset();
 
         //TODO: this should not be necessary but it is included in the same function, so :|
         vmaDestroyBuffer(vk->allocator, this->pickingCPUBuffer, this->pickingCPUAlloc);

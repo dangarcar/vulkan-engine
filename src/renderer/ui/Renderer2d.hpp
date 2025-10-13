@@ -11,8 +11,10 @@
 #include <unordered_map>
 #include <glm/glm.hpp>
 
+
 static const char* const REND2D_FRAG_SHADER_SRC = "vulkan-engine/shaders/bin/rend2d.frag.spv";
 static const char* const REND2D_VERT_SHADER_SRC = "vulkan-engine/shaders/bin/rend2d.vert.spv";
+
 
 namespace fly {
 
@@ -20,6 +22,7 @@ namespace fly {
         alignas(16) glm::mat4 proj;
         glm::vec4 modColor;
         int useTexture;
+        float zIndex;
     };
 
     struct Vertex2D {
@@ -32,41 +35,27 @@ namespace fly {
         bool operator==(const Vertex2D& other) const;
     };
 
+    glm::mat4 orthoMatrixByWindowExtent(int width, int height);
+    constexpr float MAX_Z_INDEX = 100;
+
     using Vertex2DArray = TVertexArray<Vertex2D>;
     class GPipeline2D;
 
+    //Everything is private because is managed by the ui renderer
     class Renderer2d {
-    public:
+    private:
         Renderer2d(std::shared_ptr<VulkanInstance> vk);
     
         void resize(int width, int height);
 
         void init(std::unique_ptr<GPipeline2D> pipeline, VkCommandPool commandPool);
-
-        void renderTexture(
-            const Texture& texture, 
-            const TextureSampler& textureSampler, 
-            glm::vec2 origin, 
-            glm::vec2 size, 
-            bool centre = false,
-            glm::vec4 modColor = {1,1,1,1}
-        ) {
-            _renderTexture(texture, textureSampler, origin, size, centre, modColor, true);
-        }
-
-        void renderQuad(
-            glm::vec2 origin, 
-            glm::vec2 size, 
-            glm::vec4 color,
-            bool centre = false
-        ) {
-            _renderTexture(*this->nullTexture, *this->nullTextureSampler, origin, size, centre, color, false);
-        }
         
         void render(uint32_t currentFrame, VkCommandPool commandPool);
         GPipeline2D* getPipeline() { return pipeline2d.get(); }
 
+
     private:
+        friend class UIRenderer;
 
         void _renderTexture(
             const Texture& texture, 
@@ -75,7 +64,8 @@ namespace fly {
             glm::vec2 size, 
             bool centre,
             glm::vec4 modColor,
-            bool useTexture
+            bool useTexture,
+            int zIndex
         );
 
         struct TextureRender {
@@ -119,7 +109,7 @@ namespace fly {
 
     class GPipeline2D: public TGraphicsPipeline<Vertex2D> {
     public:
-        GPipeline2D(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, 0} {}
+        GPipeline2D(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, DEPTH_TEST_ENABLED} {}
         ~GPipeline2D() = default;
     
         void updateDescriptorSet(

@@ -1,7 +1,6 @@
 #include "TextRenderer.hpp"
 
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -16,17 +15,38 @@
 namespace fly {
 
     TextRenderer::TextRenderer(std::shared_ptr<VulkanInstance> vk): vk{vk} {
-        this->orthoProj = glm::ortho(0.0f, (float)vk->swapChainExtent.width, 0.0f, (float)vk->swapChainExtent.height);
+        this->orthoProj = orthoMatrixByWindowExtent(vk->swapChainExtent.width, vk->swapChainExtent.height);
+
+        VkDeviceSize bufferSize = sizeof(GPUCharacter) * MAX_CHARS;
+        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
+            VkBufferCreateInfo bufferCreateInfo{};
+            bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferCreateInfo.size = bufferSize;
+            bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+            VmaAllocationCreateInfo bufferCreateAllocInfo = {};
+            bufferCreateAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            bufferCreateAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            
+            vmaCreateBuffer(
+                vk->allocator, 
+                &bufferCreateInfo, 
+                &bufferCreateAllocInfo, 
+                &this->fontBuffers[i], 
+                &this->fontBuffersAlloc[i], 
+                &this->fontBuffersInfo[i]
+            );
+        }
     }
 
     TextRenderer::~TextRenderer() {
-        for(auto& [k, f]: fonts) {
-            f.sampler.reset();
-            f.texture.reset();
+        this->newSampler.reset();
+        this->newTexture.reset();
+        this->fontSampler.reset();
+        this->fontTexture.reset();
 
-            for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i)
-                vmaDestroyBuffer(vk->allocator, f.buffers[i], f.buffersAlloc[i]);
-        }
+        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i)
+            vmaDestroyBuffer(vk->allocator, this->fontBuffers[i], this->fontBuffersAlloc[i]);
     }
 
     void TextRenderer::init(std::unique_ptr<TextPipeline> pipeline) {
@@ -35,11 +55,17 @@ namespace fly {
     
 
     void TextRenderer::render(uint32_t currentFrame) {
-        for(const auto& k: this->oldFonts) {
-            if(!this->fontRenderQueue.contains(k))
-                this->pipeline->setInstanceCount(this->fonts.at(k).meshIndex, 0);
+        if(this->newMeshIndex != UINT32_MAX) {
+            this->fontChars = std::move(this->newFontChars);
+            if(this->meshIndex != UINT32_MAX)
+                this->pipeline->detachModel(this->meshIndex, currentFrame);
+
+            this->fontSampler.swap(this->newSampler);
+            this->fontTexture.swap(this->newTexture);
+
+            this->meshIndex = this->newMeshIndex;
+            this->newMeshIndex = UINT32_MAX;
         }
-        this->oldFonts.clear();
 
 
         //Traverse request queue
@@ -48,46 +74,40 @@ namespace fly {
             this->requestQueue.pop();
         }
 
+
         //Traverse render queue
-        for(const auto& [k, v]: this->fontRenderQueue) {
-            if(v.size() > MAX_CHARS)
-                throw std::runtime_error("There cannot be that number of characters of the same font!");
-            
-            this->oldFonts.insert(k);
+        if(this->renderQueue.size() > MAX_CHARS)
+            throw std::runtime_error("There cannot be that number of characters of the same font!");
 
-            memcpy(this->fonts.at(k).buffersInfo[currentFrame].pMappedData, &v[0], v.size()*sizeof(GPUCharacter));
-            this->pipeline->setInstanceCount(this->fonts.at(k).meshIndex, v.size());
-        }
+        memcpy(this->fontBuffersInfo[currentFrame].pMappedData, &this->renderQueue[0], this->renderQueue.size()*sizeof(GPUCharacter));
+        this->pipeline->setInstanceCount(this->meshIndex, this->renderQueue.size());
 
-        this->fontRenderQueue.clear();
+        this->renderQueue.clear();
     }
 
     void TextRenderer::renderText(
-        const std::string& fontName, 
         const std::string& str, 
         glm::vec2 origin, 
         Align align, 
         float size, 
-        glm::vec4 color
+        glm::vec3 color,
+        int zIndex
     ) {
-        if(!this->fonts.contains(fontName)) {
-            std::cerr << fontName << " not found in game files" << std::endl;
-            return;
-        }
+        FLY_ASSERT(0 <= zIndex && zIndex < MAX_Z_INDEX, "Z index must be positive and less than the max z");
 
-        this->requestQueue.push(RenderRequest{fontName, str, origin, align, size, color});        
+        glm::vec4 colorAndZIdx = glm::vec4(color, zIndex - MAX_Z_INDEX + 1);
+        this->requestQueue.push(RenderRequest{str, origin, align, size, colorAndZIdx});        
     }
 
-    void TextRenderer::convertText(RenderRequest r) {
-        auto& font = this->fonts.at(r.fontName);                
+    void TextRenderer::convertText(RenderRequest r) {              
         std::vector<float> advances = {0};
         for(auto c: r.str) {
-            FLY_ASSERT(font.fontChars.contains(c), "{} doesn't contain character '{}' in its files", r.fontName, c);
+            FLY_ASSERT(this->fontChars.contains(c), "{} doesn't contain character '{}' in its files", this->fontName, c);
 
             if(c == '\n')
                 advances.push_back(0);
             else
-                advances.back() += font.fontChars[c].advance * r.size;
+                advances.back() += this->fontChars[c].advance * r.size;
         }
 
         float advance = 0;
@@ -99,7 +119,7 @@ namespace fly {
                 continue;
             }
 
-            auto& fontChar = font.fontChars[c];
+            auto& fontChar = this->fontChars[c];
         
             glm::vec2 localOrigin;
             switch(r.align) {
@@ -123,15 +143,15 @@ namespace fly {
 
             GPUCharacter gpuChar;
             gpuChar.proj = this->orthoProj * transform;
-            gpuChar.color = r.color;
+            gpuChar.colorAndZIdx = r.colorAndZIdx;
             gpuChar.texCoords = glm::vec4(fontChar.normalizedBegin, fontChar.normalizedEnd);
 
-            this->fontRenderQueue[r.fontName].push_back(gpuChar);
+            this->renderQueue.push_back(gpuChar);
         }
     }
 
     void TextRenderer::resize(int width, int height) {
-        this->orthoProj = glm::ortho(0.0f, (float)width, 0.0f, (float)height);
+        this->orthoProj = orthoMatrixByWindowExtent(width, height);
     }
 
     void TextRenderer::loadFont(
@@ -139,12 +159,11 @@ namespace fly {
         std::filesystem::path fontImg, 
         std::filesystem::path fontJson,
         VkCommandPool commandPool
-    ) {
-        if(this->fonts.contains(fontName))
-            return;
+    ) {        
+        this->newFontChars.clear();
+        this->fontName = fontName;
 
         //JSON LOADING
-        std::unordered_map<char, FontChar> fontChars;
         std::ifstream file(fontJson);
         auto data = nlohmann::json::parse(file);
 
@@ -169,58 +188,30 @@ namespace fly {
             fontChar.normalizedBegin = { x / width, y / height};
             fontChar.normalizedEnd = { (x + fwidth - 1) / width, (y + fheight - 1) / height};
 
-            fontChars.insert(std::make_pair(k[0], fontChar));
+            this->newFontChars.insert(std::make_pair(k[0], fontChar));
         }
 
         
         //TEXTURE LOADING
-        Font font;
-        font.texture = std::make_unique<fly::Texture>(
+        this->newTexture = std::make_unique<fly::Texture>(
             vk, commandPool, fontImg, 
             fly::STB_Format::STBI_rgb_alpha, VK_FORMAT_R8G8B8A8_SRGB
         );
-        font.sampler = std::make_unique<fly::TextureSampler>(vk, 0); //No mipmapping in the texture atlases
+        this->newSampler = std::make_unique<fly::TextureSampler>(vk, 0); //No mipmapping in the texture atlases
         
         //MODEL LOADING
         auto vertices = this->vertices;
         auto indices = this->indices;
-        font.meshIndex = this->pipeline->attachModel(std::make_unique<Vertex2DArray>(
+        this->newMeshIndex = this->pipeline->attachModel(std::make_unique<Vertex2DArray>( //TODO:
             vk, commandPool, std::move(vertices), std::move(indices)
         ));
 
-        VkDeviceSize bufferSize = sizeof(GPUCharacter) * MAX_CHARS;
-        for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            VkBufferCreateInfo bufferCreateInfo{};
-            bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bufferCreateInfo.size = bufferSize;
-            bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-
-            VmaAllocationCreateInfo bufferCreateAllocInfo = {};
-            bufferCreateAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-            bufferCreateAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-            
-            vmaCreateBuffer(
-                vk->allocator, 
-                &bufferCreateInfo, 
-                &bufferCreateAllocInfo, 
-                &font.buffers[i], 
-                &font.buffersAlloc[i], 
-                &font.buffersInfo[i]
-            );
-        }
-
         this->pipeline->updateDescriptorSet(
-            font.meshIndex, 
-            font.buffers, 
-            *font.texture, 
-            *font.sampler
+            this->newMeshIndex, 
+            this->fontBuffers, 
+            *this->newTexture, 
+            *this->newSampler
         );
-
-        
-        //KEEPING IT IN A MAP
-        font.name = fontName;
-        font.fontChars = std::move(fontChars);
-        this->fonts.insert(std::make_pair(fontName, std::move(font)));
     }
 
 

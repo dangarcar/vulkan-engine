@@ -3,12 +3,13 @@
 
 #include "Renderer2d.hpp" //This is not best practice but it is very convinient
 #include "renderer/vulkan/VulkanTypes.h"
+
 #include <memory>
 
-#include <set>
 
 static const char* const FRAG_TEXT_SHADER_SRC = "vulkan-engine/shaders/bin/text.frag.spv";
 static const char* const VERT_TEXT_SHADER_SRC = "vulkan-engine/shaders/bin/text.vert.spv";
+
 
 namespace fly {
 
@@ -27,31 +28,18 @@ namespace fly {
         glm::vec2 normalizedBegin, normalizedEnd;
     };
 
-    struct Font {
-        std::string name;
-        std::unique_ptr<Texture> texture;
-        std::unique_ptr<TextureSampler> sampler;
-        std::unordered_map<char, FontChar> fontChars;
-        
-        unsigned meshIndex;
-        std::array<VkBuffer, MAX_FRAMES_IN_FLIGHT> buffers;
-        std::array<VmaAllocation, MAX_FRAMES_IN_FLIGHT> buffersAlloc;
-        std::array<VmaAllocationInfo, MAX_FRAMES_IN_FLIGHT> buffersInfo;
-    };
-
     struct GPUCharacter {
         alignas(16) glm::mat4 proj;
-        alignas(16) glm::vec4 color;
+        alignas(16) glm::vec4 colorAndZIdx;
         alignas(16) glm::vec4 texCoords;
     };
 
     struct RenderRequest{
-        std::string fontName;
         std::string str;
         glm::vec2 origin;
         Align align;
         float size;
-        glm::vec4 color;
+        glm::vec4 colorAndZIdx;
     };
 
     class TextPipeline;
@@ -75,12 +63,12 @@ namespace fly {
         void init(std::unique_ptr<TextPipeline> pipeline);
 
         void renderText(
-            const std::string& fontName, 
             const std::string& str, 
             glm::vec2 origin, 
             Align align, 
             float size, 
-            glm::vec4 color
+            glm::vec3 color,
+            int zIndex = 0
         );
 
         TextPipeline* getPipeline() { return pipeline.get(); }
@@ -93,10 +81,21 @@ namespace fly {
         void convertText(RenderRequest r);
 
         std::queue<RenderRequest> requestQueue;
-        std::unordered_map<std::string, Font> fonts;
-        std::unordered_map<std::string, std::vector<GPUCharacter>> fontRenderQueue;
-        std::set<std::string> oldFonts; 
+        std::vector<GPUCharacter> renderQueue;
 
+        
+        //FONT
+        std::string fontName;
+        std::unique_ptr<Texture> fontTexture, newTexture;
+        std::unique_ptr<TextureSampler> fontSampler, newSampler;
+        std::unordered_map<char, FontChar> fontChars, newFontChars;
+        
+        unsigned meshIndex = UINT32_MAX, newMeshIndex = UINT32_MAX;
+        std::array<VkBuffer, MAX_FRAMES_IN_FLIGHT> fontBuffers;
+        std::array<VmaAllocation, MAX_FRAMES_IN_FLIGHT> fontBuffersAlloc;
+        std::array<VmaAllocationInfo, MAX_FRAMES_IN_FLIGHT> fontBuffersInfo;
+
+        
         std::unique_ptr<TextPipeline> pipeline;
         glm::mat4 orthoProj;
 
@@ -117,7 +116,7 @@ namespace fly {
 
     class TextPipeline: public TGraphicsPipeline<Vertex2D> {
     public:
-        TextPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, 0} {}
+        TextPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, DEPTH_TEST_ENABLED} {}
         ~TextPipeline() = default;
 
         void updateDescriptorSet(
