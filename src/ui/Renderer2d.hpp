@@ -55,7 +55,7 @@ namespace fly {
 
 
     private:
-        friend class UIRenderer;
+        friend class UIManager;
 
         void _renderTexture(
             const Texture& texture, 

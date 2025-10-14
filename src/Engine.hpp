@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Window.hpp"
-#include "renderer/ui/UIRenderer.hpp"
+#include "ui/UIManager.hpp"
 #include "renderer/FilterPipeline.hpp"
 #include "renderer/DeferredShader.hpp"
 
@@ -116,7 +116,7 @@ namespace fly {
         Window& getWindow() { return this->window; }
         const Window& getWindow() const { return this->window; }
         std::shared_ptr<VulkanInstance> getVulkanInstance() const { return this->vk; } 
-        UIRenderer& getUIRenderer() { return *this->uiRenderer; }
+        UIManager& getUIManager() { return *this->uiManager; }
         std::array<uint32_t, 9> getPickingMatrix() const { 
             std::array<uint32_t, 9> arr;
             memcpy(arr.data(), pickingCPUBufferInfo.pMappedData, 9*sizeof(uint32_t));
@@ -132,7 +132,7 @@ namespace fly {
         VkCommandPool drawCommandPool, transferCommandPool;
 
         Window window;
-        std::unique_ptr<UIRenderer> uiRenderer;
+        std::unique_ptr<UIManager> uiManager;
 
         uint32_t currentFrame = 0;
         VkDebugUtilsMessengerEXT debugMessenger;

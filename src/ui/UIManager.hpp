@@ -7,11 +7,11 @@ class GLFWwindow;
 
 namespace fly {
 
-    class UIRenderer {
+    class UIManager {
     public:
 
-        UIRenderer(GLFWwindow* window, std::shared_ptr<VulkanInstance> vk);
-        ~UIRenderer();
+        UIManager(GLFWwindow* window, std::shared_ptr<VulkanInstance> vk);
+        ~UIManager();
         
         void renderTexture(
             const Texture& texture, 

@@ -52,7 +52,7 @@ namespace fly {
         this->commandBuffers = createCommandBuffers(vk->device, MAX_FRAMES_IN_FLIGHT, this->drawCommandPool);
         createSyncObjects();
 
-        uiRenderer = std::make_unique<UIRenderer>(this->window.getGlfwWindow(), this->vk);
+        uiManager = std::make_unique<UIManager>(this->window.getGlfwWindow(), this->vk);
 
         this->tonemapper = std::make_unique<Tonemapper>(vk);
         this->tonemapper->allocate();
@@ -87,7 +87,7 @@ namespace fly {
                 window.toggleFullscreen();
 
             if(window.isFramebufferResized())
-                uiRenderer->resize(window.getWidth(), window.getHeight()); 
+                uiManager->resize(window.getWidth(), window.getHeight()); 
 
             while(!this->filterDetachPending.empty()) {
                 FilterDetachInfo& info = this->filterDetachPending.front();
@@ -101,7 +101,7 @@ namespace fly {
                 pipeline->update(this->currentFrame);
 
 
-            uiRenderer->setupFrame();
+            uiManager->setupFrame();
             ImGui::Begin("Debug");
             drawImguiEngineInfo(frameTime);
             ImGui::Text("- Scene info");
@@ -109,7 +109,7 @@ namespace fly {
             
             this->scene->run(dt, this->currentFrame, transferCommandPool);
             
-            this->uiRenderer->render(this->currentFrame);
+            this->uiManager->render(this->currentFrame);
             
             ImGui::End();
             ImGui::Render();
@@ -121,7 +121,7 @@ namespace fly {
         vkDeviceWaitIdle(vk->device);
 
         scene.reset();
-        uiRenderer.reset();
+        uiManager.reset();
         tonemapper.reset();
         cleanup();
 
@@ -165,8 +165,8 @@ namespace fly {
         vkResetCommandBuffer(this->commandBuffers[this->currentFrame], 0);
         this->recordCommandBuffer(this->commandBuffers[this->currentFrame], imageIndex);
         
-        vkResetCommandBuffer(uiRenderer->getCommandBuffer(this->currentFrame), 0);
-        uiRenderer->recordCommandBuffer(imageIndex, this->currentFrame); //WARNING: this uses the queue without synchronization!!!!
+        vkResetCommandBuffer(uiManager->getCommandBuffer(this->currentFrame), 0);
+        uiManager->recordCommandBuffer(imageIndex, this->currentFrame); //WARNING: this uses the queue without synchronization!!!!
 
         
         std::array<VkSubmitInfo, 2> submitInfos = {};
@@ -188,10 +188,10 @@ namespace fly {
         submitInfos[1].pWaitSemaphores = &this->renderFinishedSemaphores[this->currentFrame];
         submitInfos[1].pWaitDstStageMask = &uiWaitStage; 
         submitInfos[1].commandBufferCount = 1;
-        auto uiBuffer = uiRenderer->getCommandBuffer(this->currentFrame);
+        auto uiBuffer = uiManager->getCommandBuffer(this->currentFrame);
         submitInfos[1].pCommandBuffers = &uiBuffer;
         submitInfos[1].signalSemaphoreCount = 1;
-        auto uiSemaphore = uiRenderer->getRenderFinishedSemaphore(this->currentFrame);
+        auto uiSemaphore = uiManager->getRenderFinishedSemaphore(this->currentFrame);
         submitInfos[1].pSignalSemaphores = &uiSemaphore;
 
         {
@@ -204,7 +204,7 @@ namespace fly {
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
         presentInfo.waitSemaphoreCount = 1;
-        auto imguiRenderFinishedSemaphore = uiRenderer->getRenderFinishedSemaphore(this->currentFrame);
+        auto imguiRenderFinishedSemaphore = uiManager->getRenderFinishedSemaphore(this->currentFrame);
         presentInfo.pWaitSemaphores = &imguiRenderFinishedSemaphore;
         
         VkSwapchainKHR swapChains[] = {vk->swapChain};
@@ -229,13 +229,13 @@ namespace fly {
     void Engine::recreateSwapChain() {
         vkDeviceWaitIdle(vk->device);
     
-        uiRenderer->cleanupSwapchain();
+        uiManager->cleanupSwapchain();
         cleanupSwapChain();
 
         createSwapChain();
         createImageViews();
         createAttachmentsAndBuffers();
-        uiRenderer->recreateOnNewSwapChain();
+        uiManager->recreateOnNewSwapChain();
         
         deferredShader->updateShader(hdrColorTexture, albedoSpecTexture, positionsTexture, normalsTexture, pickingTexture);
         

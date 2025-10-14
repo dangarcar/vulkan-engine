@@ -1,4 +1,4 @@
-#include "UIRenderer.hpp"
+#include "UIManager.hpp"
 
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
@@ -9,7 +9,7 @@
 
 namespace fly {
 
-    UIRenderer::UIRenderer(GLFWwindow* window, std::shared_ptr<VulkanInstance> vk): 
+    UIManager::UIManager(GLFWwindow* window, std::shared_ptr<VulkanInstance> vk): 
             vk{vk}, renderer2d(vk), textRenderer(vk) 
     {
         createDescriptorPool();
@@ -30,7 +30,7 @@ namespace fly {
         this->textRenderer.init(std::move(textPipeline));
     }
 
-    UIRenderer::~UIRenderer() {
+    UIManager::~UIManager() {
         cleanupSwapchain();
 
         vkDestroyRenderPass(vk->device, this->uiRenderPass, nullptr);
@@ -49,7 +49,7 @@ namespace fly {
         vkDestroyDescriptorPool(vk->device, this->uiDescriptorPool, nullptr);
     }
 
-    void UIRenderer::initImgui(GLFWwindow* window) {
+    void UIManager::initImgui(GLFWwindow* window) {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -81,12 +81,12 @@ namespace fly {
         ImGui_ImplVulkan_Init(&init_info);
     }
 
-    void UIRenderer::resize(int width, int height) {
+    void UIManager::resize(int width, int height) {
         renderer2d.resize(width, height);
         textRenderer.resize(width, height);
     }
 
-    void UIRenderer::render(uint32_t frame) {
+    void UIManager::render(uint32_t frame) {
         this->renderer2d.getPipeline()->update(frame);
         this->renderer2d.render(frame, this->uiCommandPool);
 
@@ -94,13 +94,13 @@ namespace fly {
         this->textRenderer.render(frame);
     }
 
-    void UIRenderer::setupFrame() {
+    void UIManager::setupFrame() {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
     }
 
-    void UIRenderer::cleanupSwapchain() {
+    void UIManager::cleanupSwapchain() {
         this->depthTexture.reset();
 
         for(auto framebuffer : this->uiFramebuffers) {
@@ -108,11 +108,11 @@ namespace fly {
         }
     }
 
-    void UIRenderer::recreateOnNewSwapChain() {
+    void UIManager::recreateOnNewSwapChain() {
         createFramebuffers();
     }
     
-    void UIRenderer::recordCommandBuffer(uint32_t imageIndex, uint32_t currentFrame) {
+    void UIManager::recordCommandBuffer(uint32_t imageIndex, uint32_t currentFrame) {
         auto commandBuffer = this->uiCommandBuffers[currentFrame];
 
         VkCommandBufferBeginInfo beginInfo = {};
@@ -166,7 +166,7 @@ namespace fly {
             throw std::runtime_error("failed to record UI command buffer!");
     }
 
-    void UIRenderer::createDescriptorPool() {
+    void UIManager::createDescriptorPool() {
         VkDescriptorPoolSize pool_sizes[] = {
             { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE },
         };
@@ -187,7 +187,7 @@ namespace fly {
         }
     }
 
-    void UIRenderer::createRenderPass() {
+    void UIManager::createRenderPass() {
         VkAttachmentDescription attachment = {};
         attachment.format = vk->swapChainImageFormat;
         attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -249,7 +249,7 @@ namespace fly {
             throw std::runtime_error("could not create UI render pass");
     }
 
-    void UIRenderer::createFramebuffers() {
+    void UIManager::createFramebuffers() {
         auto depthFormat = findDepthFormat(vk->physicalDevice);        
         this->depthTexture = std::make_unique<Texture>(
             this->vk,
@@ -283,7 +283,7 @@ namespace fly {
         }
     }
 
-    void UIRenderer::createSyncObjects() {
+    void UIManager::createSyncObjects() {
         this->uiRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 
         VkSemaphoreCreateInfo semaphoreInfo{};
