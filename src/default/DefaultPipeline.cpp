@@ -43,7 +43,7 @@ namespace fly {
             imageInfo.imageView = texture.getImageView();
             imageInfo.sampler = textureSampler.getSampler();
 
-            std::vector<VkWriteDescriptorSet> descriptorWrites(2);
+            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = this->meshes[meshIndex].descriptorSets[i];
@@ -61,7 +61,7 @@ namespace fly {
             descriptorWrites[1].descriptorCount = 1;
             descriptorWrites[1].pImageInfo = &imageInfo;
 
-            vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(vk->device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -110,7 +110,7 @@ namespace fly {
 
 
     //LOAD MODEL IMPLEMENTATION
-    std::unique_ptr<VertexArray> loadModel(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path filepath) {
+    std::unique_ptr<VertexArray> loadModel(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool, std::filesystem::path filepath) {
         std::unordered_map<Vertex, uint32_t> uniqueVertices{};
 
         tinyobj::attrib_t attrib;

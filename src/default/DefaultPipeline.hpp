@@ -53,6 +53,6 @@ namespace fly {
     };
 
     using VertexArray = TVertexArray<Vertex>;
-    std::unique_ptr<VertexArray> loadModel(std::shared_ptr<VulkanInstance> vk, const VkCommandPool commandPool, std::filesystem::path filepath);
+    std::unique_ptr<VertexArray> loadModel(std::shared_ptr<VulkanInstance> vk, VkCommandPool commandPool, std::filesystem::path filepath);
 
 }

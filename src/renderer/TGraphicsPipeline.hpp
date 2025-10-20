@@ -115,7 +115,7 @@ namespace fly {
     
             VkDeviceSize offsets[] = {0};
             for(const auto& [k, mesh]: this->meshes) {
-                if(mesh.vertexArray->getVertexCount() == 0 || mesh.vertexArray->getIndexCount() == 0)
+                if(mesh.vertexArray->getVertexCount() == 0 || mesh.vertexArray->getIndexCount() == 0 || mesh.instanceCount < 1)
                     continue;
 
                 VkBuffer vBuffer = mesh.vertexArray->getVertexBuffer();
