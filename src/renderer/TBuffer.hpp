@@ -10,7 +10,7 @@ namespace fly {
     template<typename T>
     class TBuffer {
     public:
-        TBuffer(std::shared_ptr<VulkanInstance> vk, VkBufferUsageFlagBits usage, T value = {}): vk{vk} {
+        TBuffer(std::shared_ptr<VulkanInstance> vk, VkBufferUsageFlagBits usage): vk{vk} {
             VkDeviceSize bufferSize = sizeof(T);
 
             for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -19,7 +19,7 @@ namespace fly {
                 bufferCreateInfo.size = bufferSize;
                 bufferCreateInfo.usage = usage;
 
-                VmaAllocationCreateInfo bufferCreateAllocInfo = {};
+                VmaAllocationCreateInfo bufferCreateAllocInfo{};
                 bufferCreateAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
                 bufferCreateAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
                 
@@ -31,8 +31,6 @@ namespace fly {
                     &this->buffersAlloc[i], 
                     &this->buffersInfo[i]
                 );
-
-                std::memcpy(this->buffersInfo[i].pMappedData, &value, sizeof(T));
             }
         }
 
@@ -50,8 +48,8 @@ namespace fly {
             std::memcpy(this->buffersInfo[currentFrame].pMappedData, &value, sizeof(T));
         }
 
-        void updateBuffer(const T& value, size_t bytes, uint32_t currentFrame) {
-            std::memcpy(this->buffersInfo[currentFrame].pMappedData, &value, bytes);
+        void updateBufferUnsafe(void* p, size_t bytes, uint32_t currentFrame) {
+            std::memcpy(this->buffersInfo[currentFrame].pMappedData, p, bytes);
         }
 
 
