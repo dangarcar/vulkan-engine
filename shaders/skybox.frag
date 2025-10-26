@@ -2,7 +2,7 @@
 
 layout (location = 0) in vec3 inUVW;
 
-layout (binding = 1) uniform samplerCube samplerCubeMap;
+layout (binding = 0) uniform samplerCube samplerCubeMap;
 
 layout (location = 0) out vec4 outColorSpecular;
 layout (location = 1) out vec4 outPosition;

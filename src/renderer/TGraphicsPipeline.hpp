@@ -12,6 +12,7 @@
 #include <queue>
 #include <stdexcept>
 
+
 namespace fly {
     
     template<typename Vertex_t>
@@ -30,6 +31,25 @@ namespace fly {
     constexpr uint32_t BACK_CULLING_ENABLED = 0x04;
 
 
+    template<typename Vertex_t, typename T>
+    struct TMeshData {
+        std::unique_ptr<TVertexArray<Vertex_t>> vertexArray;
+        VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+        std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> descriptorSets;
+        int instanceCount;
+
+        T pushConstant;
+    };
+    //Idk what this language is about anymore
+    template<typename Vertex_t>
+    struct TMeshData<Vertex_t, void> {
+        std::unique_ptr<TVertexArray<Vertex_t>> vertexArray;
+        VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+        std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> descriptorSets;
+        int instanceCount;
+    };
+
+
     /**
     
     This class creates and destructs the graphics pipeline object, the pipeline layout and the descriptor sets
@@ -38,7 +58,7 @@ namespace fly {
     To use this, you should first call allocate, then attach the models and then populate the descriptor sets with functions created by the child of this abstract class
 
     */
-    template<typename Vertex_t>
+    template<typename Vertex_t, typename PushConstants_t = void>
     class TGraphicsPipeline : public IGraphicsPipeline {
     public:
         TGraphicsPipeline(std::shared_ptr<VulkanInstance> vk, uint32_t flags): flags(flags), vk{vk} {}
@@ -124,7 +144,10 @@ namespace fly {
                 vkCmdBindIndexBuffer(commandBuffer, mesh.vertexArray->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
     
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->pipelineLayout, 0, 1, &mesh.descriptorSets[currentFrame], 0, nullptr);
-    
+
+                if constexpr (fly::not_void<PushConstants_t>)
+                    vkCmdPushConstants(commandBuffer, this->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants_t), &mesh.pushConstant);
+
                 vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.vertexArray->getIndexCount()),
                     mesh.instanceCount, 0, 0, 0); 
             }
@@ -137,6 +160,13 @@ namespace fly {
             meshes.at(meshIndex).instanceCount = instanceCount;
         }
 
+        
+        template<typename T = PushConstants_t>
+        void setPushConstant(unsigned meshIndex, const T& pc) requires fly::not_void<T> {
+            FLY_ASSERT(meshes.contains(meshIndex), "Invalid mesh");
+            meshes.at(meshIndex).pushConstant = pc;
+        }
+
         TVertexArray<Vertex_t>& getVertexData(unsigned meshIndex) {
             FLY_ASSERT(meshes.contains(meshIndex), "Invalid mesh");
             return *meshes.at(meshIndex).vertexArray;
@@ -144,12 +174,8 @@ namespace fly {
 
     protected:
         uint32_t flags;
-        struct MeshData {
-            std::unique_ptr<TVertexArray<Vertex_t>> vertexArray;
-            VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-            std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> descriptorSets;
-            int instanceCount;
-        }; 
+        using MeshData = TMeshData<Vertex_t, PushConstants_t>;
+
 
         unsigned globalId = 0;
         std::unordered_map<unsigned, MeshData> meshes;
@@ -169,6 +195,7 @@ namespace fly {
         VkPipeline graphicsPipeline = VK_NULL_HANDLE;
     
     private:
+
         static std::pair<VkPipeline, VkPipelineLayout> createGraphicsPipeline(
             std::shared_ptr<VulkanInstance> vk, 
             std::vector<char> vertShaderCode, 
@@ -322,11 +349,22 @@ namespace fly {
             pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
             pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
             pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
-        
-            VkPipelineLayout pipelineLayout;
-            if (vkCreatePipelineLayout(vk->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create pipeline layout!");
+
+
+            if constexpr (fly::not_void<PushConstants_t>) {
+                VkPushConstantRange pushConstant;
+                pushConstant.offset = 0;
+	            pushConstant.size = sizeof(PushConstants_t);
+	            pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+                pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
+	            pipelineLayoutInfo.pushConstantRangeCount = 1;
             }
+
+
+            VkPipelineLayout pipelineLayout;
+            if(vkCreatePipelineLayout(vk->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) 
+                throw std::runtime_error("failed to create pipeline layout!");
         
             
             VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -352,7 +390,7 @@ namespace fly {
             pipelineInfo.basePipelineIndex = -1; // Optional
         
             VkPipeline graphicsPipeline;
-            if (vkCreateGraphicsPipelines(vk->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+            if(vkCreateGraphicsPipelines(vk->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create graphics pipeline!");
             }
         

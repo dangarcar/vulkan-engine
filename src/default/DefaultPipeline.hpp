@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../renderer/TGraphicsPipeline.hpp"
-#include "../renderer/TBuffer.hpp"
 #include "../renderer/TVertexArray.hpp"
 #include "../renderer/Texture.hpp"
 
@@ -14,10 +13,9 @@ static const char* const DEFAULT_VERT_SHADER_SRC = "vulkan-engine/shaders/bin/de
 
 namespace fly {
     
-    struct DefaultUBO {
-        alignas(16) glm::mat4 model;
-        alignas(16) glm::mat4 view;
-        alignas(16) glm::mat4 proj;
+    struct PushDefault {
+        glm::mat4 model;
+        glm::mat4 projView;
     };
 
     struct Vertex {
@@ -32,15 +30,13 @@ namespace fly {
         bool operator==(const Vertex& other) const;
     };
 
-    class DefaultPipeline: public TGraphicsPipeline<Vertex> {
+    class DefaultPipeline: public TGraphicsPipeline<Vertex, PushDefault> {
     public:
         DefaultPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, DEPTH_TEST_ENABLED | DEFERRED_ENABLED | BACK_CULLING_ENABLED} {}
         ~DefaultPipeline() = default;
     
         void updateDescriptorSet(
             unsigned meshIndex,
-
-            const TBuffer<DefaultUBO>& uniformBuffer,
             const Texture& texture,
             const TextureSampler& textureSampler
         );

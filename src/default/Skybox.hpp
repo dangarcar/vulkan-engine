@@ -6,7 +6,6 @@
 
 #include "../renderer/TGraphicsPipeline.hpp"
 #include "../renderer/TVertexArray.hpp"
-#include "../renderer/TBuffer.hpp"
 #include "../renderer/Texture.hpp"
 
 
@@ -15,7 +14,7 @@ static const char* const SKYBOX_VERT_SHADER_SRC = "vulkan-engine/shaders/bin/sky
 
 namespace fly {
 
-    struct UBOSkybox {
+    struct PushSkybox {
 	    glm::mat4 projection;
 	    glm::mat4 view;
     };
@@ -39,13 +38,12 @@ namespace fly {
         Skybox(VkCommandPool commandPool, std::unique_ptr<Texture> cubemap, std::unique_ptr<TextureSampler> cubemapSampler);
         ~Skybox() = default;
     
-        void render(uint32_t currentFrame, glm::mat4 projection, glm::mat4 view);
+        void render(glm::mat4 projection, glm::mat4 view);
 
 
     private:
         SkyboxPipeline* pipeline;
 
-        std::unique_ptr<TBuffer<UBOSkybox>> uniformBuffer;
         std::unique_ptr<TextureSampler> cubemapSampler;
         std::unique_ptr<Texture> cubemap;
 
@@ -117,13 +115,12 @@ namespace fly {
     class Texture;
     class TextureSampler;
 
-    class SkyboxPipeline : public TGraphicsPipeline<SimpleVertex> {
+    class SkyboxPipeline : public TGraphicsPipeline<SimpleVertex, PushSkybox> {
     public:
         SkyboxPipeline(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, DEFERRED_ENABLED} {}
         ~SkyboxPipeline() = default;
 
         void updateDescriptorSet(
-            const TBuffer<UBOSkybox>& uniformBuffer,
             const Texture& texture,
             const TextureSampler& textureSampler
         );

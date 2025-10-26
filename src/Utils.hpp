@@ -44,6 +44,9 @@
 
 namespace fly {
 
+    template<typename T>
+    concept not_void = !std::is_void_v<T>;
+
     namespace print {
 
         // Overload operator << for glm::vec

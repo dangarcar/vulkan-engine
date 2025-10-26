@@ -74,6 +74,8 @@ namespace fly {
             this->proj = glm::perspective(glm::radians(this->fov), window.getWidth() / (float) window.getHeight(), 0.1f, 50.0f);
             this->proj[1][1] *= -1;
         }
+
+        this->projView = this->proj * this->view;
     }
 
 }

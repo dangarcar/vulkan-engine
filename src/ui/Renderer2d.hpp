@@ -18,7 +18,7 @@ static const char* const REND2D_VERT_SHADER_SRC = "vulkan-engine/shaders/bin/ren
 
 namespace fly {
 
-    struct UBO2D {
+    struct Push2d {
         alignas(16) glm::mat4 proj;
         glm::vec4 modColor;
         int useTexture;
@@ -71,13 +71,8 @@ namespace fly {
         struct TextureRender {
             const Texture& texture; 
             const TextureSampler& textureSampler; 
-            UBO2D ubo;
+            Push2d pc;
         };
-        struct TextureData {
-            unsigned meshIdx;
-            std::unique_ptr<TBuffer<UBO2D>> uniformBuffer;
-        };
-        void destroyTextureData(TextureData&& data, uint32_t currentFrame);
 
 
     private:
@@ -87,10 +82,9 @@ namespace fly {
         std::unique_ptr<Texture> nullTexture;
         std::unique_ptr<TextureSampler> nullTextureSampler;
 
-        std::unordered_map<TextureRef, std::vector<TextureData>> textureData;
+        std::unordered_map<TextureRef, std::vector<unsigned>> textureIndices;
 
         std::unordered_map<TextureRef, std::vector<TextureRender>> textureRenderQueue, oldTextureRenders;
-        std::vector<std::pair<uint32_t, std::unique_ptr<TBuffer<UBO2D>>>> ubosToDestroy;
 
         std::shared_ptr<VulkanInstance> vk;
         glm::mat4 orthoProj;
@@ -107,15 +101,13 @@ namespace fly {
 
 
 
-    class GPipeline2D: public TGraphicsPipeline<Vertex2D> {
+    class GPipeline2D: public TGraphicsPipeline<Vertex2D, Push2d> {
     public:
         GPipeline2D(std::shared_ptr<VulkanInstance> vk): TGraphicsPipeline{vk, DEPTH_TEST_ENABLED} {}
         ~GPipeline2D() = default;
     
         void updateDescriptorSet(
             unsigned meshIndex,
-
-            const TBuffer<UBO2D>& uniformBuffer,
             const Texture& texture,
             const TextureSampler& textureSampler
         );

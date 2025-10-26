@@ -42,14 +42,14 @@ namespace fly {
         transform = glm::translate(transform, glm::vec3(origin, 0));
         transform = glm::scale(transform, glm::vec3(size, 1));
         
-        UBO2D ubo;
-        ubo.proj = this->orthoProj * transform;
-        ubo.modColor = modColor;
-        ubo.useTexture = useTexture;
-        ubo.zIndex = zIndex - MAX_Z_INDEX + 1;
+        Push2d pc;
+        pc.proj = this->orthoProj * transform;
+        pc.modColor = modColor;
+        pc.useTexture = useTexture;
+        pc.zIndex = zIndex - MAX_Z_INDEX + 1;
 
         this->textureRenderQueue[texture.toRef()].push_back(
-            {texture, textureSampler, ubo}
+            {texture, textureSampler, pc}
         );
     }
 
@@ -57,61 +57,42 @@ namespace fly {
         this->orthoProj = orthoMatrixByWindowExtent(width, height);
     }
 
-    void Renderer2d::render(uint32_t currentFrame, VkCommandPool commandPool) {
-        //DESTROY OLD UBOS WHEN THEY'RE NOT USED ANYMORE
-        std::vector<std::pair<uint32_t, std::unique_ptr<TBuffer<UBO2D>>>> newUbosToDestroy;
-        for(auto& p: this->ubosToDestroy) {
-            if(currentFrame != p.first) {
-                newUbosToDestroy.push_back(std::move(p));
-                continue;
-            }
-
-            p.second.reset(); //Remove ubo
-        }
-        this->ubosToDestroy = std::move(newUbosToDestroy);        
-        
+    void Renderer2d::render(uint32_t currentFrame, VkCommandPool commandPool) {        
         //MATCH THE TEXTURE DATA TO RENDER WITH THE ONE THAT THE PIPELINE HOLDS
         for(auto& [k, v]: this->textureRenderQueue) {
-            if(this->textureData[k].size() > v.size()) { //Clean up instances of a texture
-                while(this->textureData[k].size() != v.size()) {   
-                    destroyTextureData(std::move(this->textureData[k].back()), currentFrame);
-                    this->textureData[k].pop_back();
+            if(this->textureIndices[k].size() > v.size()) { //Clean up instances of a texture
+                while(this->textureIndices[k].size() != v.size()) {   
+                    this->pipeline2d->detachModel(this->textureIndices[k].back(), currentFrame);
+                    this->textureIndices[k].pop_back();
                 }
             } 
-            else if(textureData[k].size() < v.size()) {
-                while(this->textureData[k].size() != v.size()) {
-                    TextureData data;
-                    data.uniformBuffer = std::make_unique<TBuffer<UBO2D>>(this->vk, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
+            else if(textureIndices[k].size() < v.size()) {
+                while(this->textureIndices[k].size() != v.size()) {
                     auto vertices = this->vertices;
                     auto indices = this->indices;
-                    data.meshIdx = this->pipeline2d->attachModel(std::make_unique<Vertex2DArray>(
+                    auto meshIdx = this->pipeline2d->attachModel(std::make_unique<Vertex2DArray>(
                         this->vk, commandPool, std::move(vertices), std::move(indices)
                     ));
                 
-                    this->pipeline2d->updateDescriptorSet(
-                        data.meshIdx, 
-                        *data.uniformBuffer, 
-                        v[0].texture, 
-                        v[0].textureSampler
-                    );
-                
-                    this->textureData[k].emplace_back(std::move(data));
+                    this->pipeline2d->updateDescriptorSet(meshIdx, v[0].texture, v[0].textureSampler);
+
+                    this->textureIndices[k].emplace_back(meshIdx);
                 }
             }
-
+            
             for(size_t i=0; i<v.size(); ++i) {
-                this->textureData[k][i].uniformBuffer->updateBuffer(this->textureRenderQueue[k][i].ubo, currentFrame);
+                auto& renderData = this->textureRenderQueue[k][i];
+                this->pipeline2d->setPushConstant(this->textureIndices[k][i], renderData.pc);
             }
         }
 
         //CLEAN UP ALL TEXTURES
         for(auto& [k, v]: this->oldTextureRenders) {
             if(!this->textureRenderQueue.contains(k)) {
-                for(auto& data: this->textureData[k]) {
-                    destroyTextureData(std::move(data), currentFrame);
+                for(auto meshIdx: this->textureIndices[k]) {
+                    this->pipeline2d->detachModel(meshIdx, currentFrame);
                 }
-                this->textureData.erase(k);
+                this->textureIndices.erase(k);
             }
         }
 
@@ -119,59 +100,38 @@ namespace fly {
         this->textureRenderQueue.clear();
     }
 
-    void Renderer2d::destroyTextureData(TextureData&& data, uint32_t currentFrame) {
-        this->pipeline2d->detachModel(data.meshIdx, currentFrame);
-        this->ubosToDestroy.emplace_back(std::make_pair(currentFrame, std::move(data.uniformBuffer)));
-    }
-
 
     //2D PIPELINE IMPLEMENTATION
     void GPipeline2D::updateDescriptorSet(
         unsigned meshIndex,
-
-        const TBuffer<UBO2D>& uniformBuffer,
         const Texture& texture,
         const TextureSampler& textureSampler
     ) {
         FLY_ASSERT(this->meshes[meshIndex].descriptorSets.size() == MAX_FRAMES_IN_FLIGHT, "Descriptor set vector bad size!");
 
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = uniformBuffer.getBuffer(i);
-            bufferInfo.offset = 0;
-            bufferInfo.range = uniformBuffer.getSize();
-
             VkDescriptorImageInfo imageInfo{};
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             imageInfo.imageView = texture.getImageView();
             imageInfo.sampler = textureSampler.getSampler();
 
-            std::vector<VkWriteDescriptorSet> descriptorWrites(2);
+            std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = this->meshes[meshIndex].descriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
             descriptorWrites[0].dstArrayElement = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pBufferInfo = &bufferInfo;
+            descriptorWrites[0].pImageInfo = &imageInfo;
 
-            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = this->meshes[meshIndex].descriptorSets[i];
-            descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].dstArrayElement = 0;
-            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pImageInfo = &imageInfo;
-
-            vkUpdateDescriptorSets(vk->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(vk->device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
         }
     }
 
 
     DescriptorSetLayout GPipeline2D::createDescriptorSetLayout() {
         return newDescriptorSetBuild(MAX_FRAMES_IN_FLIGHT, {
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
             {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
         }).build(vk);
     }

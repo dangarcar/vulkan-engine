@@ -18,11 +18,13 @@ namespace fly {
 
         glm::mat4 getProjection() const { return this->proj; }
         glm::mat4 getView() const { return this->view; } 
+        glm::mat4 getProjView() const { return this->projView; } 
+
 
         glm::vec3 getPos() const { return this->pos; }
 
     private:
-        glm::mat4 proj, view;
+        glm::mat4 proj, view, projView;
         glm::vec3 pos, lookDir;
         float fov, speed = 1.0f, mouseSpeed = 500.0f, scrollSpeed = 600.0f;
         bool used = false;

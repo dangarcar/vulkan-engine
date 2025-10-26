@@ -1,10 +1,9 @@
 #version 450
 
-layout(binding = 0) uniform UniformBufferObject {
+layout(push_constant) uniform PushDefault {
     mat4 model;
-    mat4 view;
-    mat4 proj;
-} ubo;
+    mat4 projView;
+} pc;
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
@@ -17,9 +16,9 @@ layout(location = 2) out vec2 fragTexCoord;
 
 
 void main() {
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
+    gl_Position = pc.projView * pc.model * vec4(inPosition, 1.0);
 
     fragTexCoord = inTexCoord;
     fragPos = inPosition;
-    fragNormal = normalize(mat3(transpose(inverse(ubo.model))) * inNormal);
+    fragNormal = normalize(mat3(transpose(inverse(pc.model))) * inNormal);
 }

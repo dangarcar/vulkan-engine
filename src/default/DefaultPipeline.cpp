@@ -25,41 +25,26 @@ namespace fly {
     //DEFAULT PIPELINE IMPLEMENTATION
     void DefaultPipeline::updateDescriptorSet(
         unsigned meshIndex,
-
-        const TBuffer<DefaultUBO>& uniformBuffer,
         const Texture& texture,
         const TextureSampler& textureSampler
     ) {
         FLY_ASSERT(this->meshes[meshIndex].descriptorSets.size() == MAX_FRAMES_IN_FLIGHT, "Descriptor set vector bad size!");
 
         for(int i=0; i<MAX_FRAMES_IN_FLIGHT; ++i) {
-            VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = uniformBuffer.getBuffer(i);
-            bufferInfo.offset = 0;
-            bufferInfo.range = uniformBuffer.getSize();
-
             VkDescriptorImageInfo imageInfo{};
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             imageInfo.imageView = texture.getImageView();
             imageInfo.sampler = textureSampler.getSampler();
 
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+            std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = this->meshes[meshIndex].descriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
             descriptorWrites[0].dstArrayElement = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = this->meshes[meshIndex].descriptorSets[i];
-            descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].dstArrayElement = 0;
-            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pImageInfo = &imageInfo;
+            descriptorWrites[0].pImageInfo = &imageInfo;
 
             vkUpdateDescriptorSets(vk->device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
         }
@@ -67,7 +52,6 @@ namespace fly {
 
     DescriptorSetLayout DefaultPipeline::createDescriptorSetLayout() {
         return newDescriptorSetBuild(MAX_FRAMES_IN_FLIGHT, {
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
             {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
         }).build(vk);
     }

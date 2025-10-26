@@ -1,11 +1,11 @@
 #version 450
 
-layout(binding = 0) uniform UBO2D {
+layout(push_constant) uniform Push2d {
     mat4 proj;
     vec4 modColor;
     int useTexture;
     float zIndex;
-} ubo;
+} pc;
 
 layout(location = 0) in vec2 inPosition; //Because in the quad tex coords are the same as vertex positions in local space
 
@@ -14,9 +14,9 @@ layout(location = 1) out vec4 modColor;
 layout(location = 2) out int useTexture;
 
 void main() {
-    gl_Position = ubo.proj * vec4(inPosition, ubo.zIndex, 1);
+    gl_Position = pc.proj * vec4(inPosition, pc.zIndex, 1);
 
     fragTexCoord = inPosition;
-    modColor = ubo.modColor;
-    useTexture = ubo.useTexture;
+    modColor = pc.modColor;
+    useTexture = pc.useTexture;
 }
