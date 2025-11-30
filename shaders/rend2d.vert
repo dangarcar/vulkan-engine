@@ -3,6 +3,7 @@
 layout(push_constant) uniform Push2d {
     mat4 proj;
     vec4 modColor;
+    vec2 origin, relSize;
     int useTexture;
     float zIndex;
 } pc;
@@ -16,7 +17,7 @@ layout(location = 2) out int useTexture;
 void main() {
     gl_Position = pc.proj * vec4(inPosition, pc.zIndex, 1);
 
-    fragTexCoord = inPosition;
+    fragTexCoord = pc.origin + inPosition * pc.relSize;
     modColor = pc.modColor;
     useTexture = pc.useTexture;
 }

@@ -18,11 +18,13 @@ namespace fly {
             const TextureSampler& textureSampler, 
             glm::vec2 origin, 
             glm::vec2 size, 
+            glm::vec2 relOrigin = {0, 0},
+            glm::vec2 relSize = {1, 1},
             bool centre = false,
             glm::vec4 modColor = {1,1,1,1},
             int zIndex = 0
         ) {
-            this->renderer2d._renderTexture(texture, textureSampler, origin, size, centre, modColor, true, zIndex);
+            this->renderer2d._renderTexture(texture, textureSampler, origin, size, centre, modColor, relOrigin, relSize, true, zIndex);
         }
 
         void renderQuad(
@@ -32,7 +34,7 @@ namespace fly {
             bool centre = false,
             int zIndex = 0
         ) {
-            this->renderer2d._renderTexture(*renderer2d.nullTexture, *renderer2d.nullTextureSampler, origin, size, centre, color, false, zIndex);         
+            this->renderer2d._renderTexture(*renderer2d.nullTexture, *renderer2d.nullTextureSampler, origin, size, centre, color, {0,0}, {1,1}, false, zIndex);         
         }
 
         void renderText(

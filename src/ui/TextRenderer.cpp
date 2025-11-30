@@ -202,7 +202,7 @@ namespace fly {
         //MODEL LOADING
         auto vertices = this->vertices;
         auto indices = this->indices;
-        this->newMeshIndex = this->pipeline->attachModel(std::make_unique<Vertex2DArray>( //TODO:
+        this->newMeshIndex = this->pipeline->attachModel(std::make_unique<Vertex2DArray>(
             vk, commandPool, std::move(vertices), std::move(indices)
         ));
 

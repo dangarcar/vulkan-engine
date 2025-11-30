@@ -21,6 +21,7 @@ namespace fly {
     struct Push2d {
         alignas(16) glm::mat4 proj;
         glm::vec4 modColor;
+        glm::vec2 origin, relSize;
         int useTexture;
         float zIndex;
     };
@@ -64,6 +65,8 @@ namespace fly {
             glm::vec2 size, 
             bool centre,
             glm::vec4 modColor,
+            glm::vec2 relOrigin,
+            glm::vec2 relSize,
             bool useTexture,
             int zIndex
         );

@@ -30,6 +30,8 @@ namespace fly {
         glm::vec2 size, 
         bool centre,
         glm::vec4 modColor,
+        glm::vec2 relOrigin,
+        glm::vec2 relSize,
         bool useTexture,
         int zIndex
     ) {
@@ -45,6 +47,8 @@ namespace fly {
         Push2d pc;
         pc.proj = this->orthoProj * transform;
         pc.modColor = modColor;
+        pc.origin = relOrigin;
+        pc.relSize = relSize;
         pc.useTexture = useTexture;
         pc.zIndex = zIndex - MAX_Z_INDEX + 1;
 
